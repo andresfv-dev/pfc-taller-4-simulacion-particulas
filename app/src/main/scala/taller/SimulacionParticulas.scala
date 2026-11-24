@@ -28,7 +28,9 @@ class SimulacionParticulas {
   }
 
   /** Avanza solo el tramo entre `desde` incluido y `hasta` excluido. */
-  def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = ???
+  def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = {
+    s.slice(desde, hasta).map(p => mover(p, dt))
+  }
 
   /**
    * Parte el sistema por la mitad con `parallel` mientras el tramo tenga más

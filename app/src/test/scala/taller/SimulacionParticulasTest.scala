@@ -266,4 +266,31 @@ class SimulacionParticulasTest extends AnyFunSuite {
       Particula(Vector2(4, -2), Vector2(0, 0), 2.0))
     assert(pasoSecuencial(quietas, 10.0).toList == quietas.toList)
   }
+
+  // pruebas propias pasoSegmento
+
+  test("pasoSegmento: un tramo intermedio mueve solo sus partículas") {
+    val r = pasoSegmento(tres, 2.0, 1, 3)
+    assert(r.length == 2 && r(0).pos == Vector2(2, 0) && r(1).pos == Vector2(3, 7))
+  }
+
+  test("pasoSegmento: el tramo completo coincide con pasoSecuencial") {
+    assert(pasoSegmento(tres, 2.0, 0, 3).toList == pasoSecuencial(tres, 2.0).toList)
+  }
+
+  test("pasoSegmento: dos tramos contiguos unidos dan el paso completo") {
+    assert((0 to 3).forall { m =>
+      (pasoSegmento(tres, 1.5, 0, m) ++ pasoSegmento(tres, 1.5, m, 3)).toList ==
+        pasoSecuencial(tres, 1.5).toList
+    })
+  }
+
+  test("pasoSegmento: el resultado tiene hasta - desde partículas") {
+    assert(pasoSegmento(grande, 0.5, 100, 350).length == 250)
+  }
+
+  test("pasoSegmento: no modifica el sistema original") {
+    pasoSegmento(tres, 5.0, 0, 3)
+    assert(tres(0).pos == Vector2(0, 0) && tres(1).pos == Vector2(2, 2) && tres(2).pos == Vector2(-1, 3))
+  }
 }

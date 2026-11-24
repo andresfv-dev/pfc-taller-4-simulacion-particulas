@@ -257,3 +257,159 @@ val r = pasoSecuencial(tres, 2.0)
 println(r.map(_.pos).toList)     // List(Vector2(2.0,0.0), Vector2(2.0,0.0), Vector2(3.0,7.0))
 println(tres.map(_.pos).toList)  // List(Vector2(0.0,0.0), Vector2(2.0,2.0), Vector2(-1.0,3.0)), tres no cambió
 ```
+
+---
+
+## 3. `pasoSegmento`
+
+### Definición del algoritmo
+
+```scala
+def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = {
+  s.slice(desde, hasta).map(p => mover(p, dt))
+}
+```
+
+* La función `pasoSegmento` avanza un intervalo `dt` solo un tramo del
+  sistema y devuelve únicamente ese tramo.
+* Recibe cuatro parámetros:
+
+  * `s`: el sistema completo, un `Array[Particula]`.
+  * `dt`: el intervalo de tiempo.
+  * `desde`: la posición donde empieza el tramo (incluida).
+  * `hasta`: la posición donde termina el tramo (excluida).
+* El resultado tiene `hasta - desde` partículas. Si `desde == hasta`, el
+  tramo es vacío y el resultado también.
+* Es el bloque con el que se construye `pasoParalelo`: cada hilo resuelve un
+  tramo con `pasoSegmento` y luego se pegan los resultados.
+* No modifica `s`.
+
+### Explicación paso a paso
+
+La función hace dos cosas, una después de la otra:
+
+1. `s.slice(desde, hasta)`: recorta el arreglo y se queda con las partículas
+   en las posiciones `desde`, `desde + 1`, …, `hasta - 1`. Es un arreglo
+   nuevo; `s` no cambia.
+2. `.map(p => mover(p, dt))`: mueve cada partícula del recorte, igual que
+   `pasoSecuencial` (sección 2), pero solo sobre el tramo.
+
+Es decir, `pasoSegmento(s, dt, desde, hasta)` es lo mismo que
+`pasoSecuencial(s.slice(desde, hasta), dt)`.
+
+Si `desde` o `hasta` se salen del arreglo, `slice` los ajusta a los bordes en
+vez de fallar, y si `hasta <= desde` devuelve un arreglo vacío.
+
+---
+
+### Evaluación con el modelo de sustitución
+
+Ejemplo, con el sistema `tres` de la sección 2:
+
+```scala
+pasoSegmento(tres, 2.0, 1, 3)
+```
+
+#### Paso 1: Llamada inicial
+
+```scala
+pasoSegmento(tres, 2.0, 1, 3)
+```
+
+#### Paso 2: Se reemplaza el cuerpo de la función
+
+```scala
+tres.slice(1, 3).map(p => mover(p, 2.0))
+```
+
+#### Paso 3: Se evalúa `slice` (posiciones 1 y 2; la 0 queda fuera)
+
+```scala
+Array(
+  Particula(Vector2(2, 2),  Vector2(0, -1), 2.0),
+  Particula(Vector2(-1, 3), Vector2(2, 2),  3.0)).map(p => mover(p, 2.0))
+```
+
+#### Paso 4: `map` aplica `mover` a cada partícula del tramo
+
+```scala
+Array(
+  mover(Particula(Vector2(2, 2),  Vector2(0, -1), 2.0), 2.0),
+  mover(Particula(Vector2(-1, 3), Vector2(2, 2),  3.0), 2.0))
+```
+
+#### Paso 5: Se evalúa cada `mover`
+
+```scala
+(2, 2)  + (0, -1) * 2.0  =  (2, 2)  + (0, -2)  =  (2, 0)
+(-1, 3) + (2, 2)  * 2.0  =  (-1, 3) + (4, 4)   =  (3, 7)
+```
+
+#### Paso 6: Resultado
+
+```scala
+Array(
+  Particula(Vector2(2, 0), Vector2(0, -1), 2.0),
+  Particula(Vector2(3, 7), Vector2(2, 2),  3.0))
+```
+
+Dos partículas (`3 - 1 = 2`), las mismas que da `pasoSecuencial(tres, 2.0)`
+en las posiciones 1 y 2. La partícula 0 no se calcula.
+
+#### Caso del tramo vacío
+
+```scala
+pasoSegmento(tres, 2.0, 1, 1)
+→ tres.slice(1, 1).map(p => mover(p, 2.0))
+→ Array().map(p => mover(p, 2.0))
+→ Array()
+```
+
+---
+
+### Diagrama de llamados
+
+```mermaid
+sequenceDiagram
+    participant PSeg as pasoSegmento(tres, 2.0, 1, 3)
+    participant Sl as tres.slice(1, 3)
+    participant Map as tramo.map
+    participant M1 as mover(tres(1), 2.0)
+    participant M2 as mover(tres(2), 2.0)
+
+    PSeg->>Sl: recorta posiciones 1 y 2
+    Sl-->>PSeg: Array(tres(1), tres(2))
+    PSeg->>Map: aplica p => mover(p, 2.0)
+    Map->>M1: partícula 1
+    M1-->>Map: pos (2, 0)
+    Map->>M2: partícula 2
+    M2-->>Map: pos (3, 7)
+    Map-->>PSeg: Array(2 partículas nuevas)
+```
+
+---
+
+### Partir el sistema en tramos
+
+Si se parte `tres` en el índice 1, los dos tramos juntos dan lo mismo que el
+paso secuencial completo, sin perder ni repetir partículas:
+
+```scala
+pasoSegmento(tres, 2.0, 0, 1) ++ pasoSegmento(tres, 2.0, 1, 3)
+// Array(pos (2,0)) ++ Array(pos (2,0), pos (3,7))
+// == pasoSecuencial(tres, 2.0)
+```
+
+Esto es lo que aprovechará `pasoParalelo`: los dos tramos no comparten
+partículas, así que se pueden calcular en hilos distintos al mismo tiempo.
+
+---
+
+### Ejemplo de uso
+
+```scala
+val tramo = pasoSegmento(tres, 2.0, 1, 3)
+println(tramo.length)              // 2
+println(tramo.map(_.pos).toList)   // List(Vector2(2.0,0.0), Vector2(3.0,7.0))
+println(pasoSegmento(tres, 2.0, 1, 1).isEmpty)  // true
+```
