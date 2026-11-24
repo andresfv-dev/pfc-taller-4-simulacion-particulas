@@ -1,131 +1,128 @@
-# Algoritmo Factorial con Recursión de Cola
+# Informe de proceso
 
-## Definición del Algoritmo
+## 1. `mover`
 
-```Scala
-def factorial(n: Int): BigInt = {
-  @annotation.tailrec
-  def loop(x: Int, acumulador: BigInt): BigInt = {
-    if (x <= 1) acumulador
-    else loop(x - 1, acumulador * x)
-  }
-  loop(n, 1)
+### Definición del algoritmo
+
+```scala
+def mover(p: Particula, dt: Double): Particula = {
+  Particula(p.pos + p.vel * dt, p.vel, p.masa)
 }
 ```
 
-* La función `factorial` calcula el factorial de un número `n` utilizando **recursión de cola**.
-* La función interna `loop` es la que hace la recursión:
+* La función `mover` calcula dónde queda una partícula después de un intervalo
+  de tiempo `dt`.
+* Recibe dos parámetros:
 
-  * Recibe dos parámetros:
+  * `p`: la partícula, con su posición `pos`, su velocidad `vel` y su `masa`.
+  * `dt`: el intervalo de tiempo que avanza la simulación.
+* No modifica `p`: construye una **partícula nueva**. La posición cambia; la
+  velocidad y la masa se copian tal cual.
+* La función **no es recursiva**: es una sola expresión que se evalúa en un
+  número fijo de pasos, sin importar los datos de entrada.
 
-    * `x`: el valor actual decreciente hasta llegar a 1.
-    * `acumulador`: donde se guarda el resultado parcial en cada paso.
-* El decorador `@annotation.tailrec` obliga a que la función sea optimizada como recursión de cola, es decir, **no se acumulan llamados en la pila**.
+### Explicación paso a paso
 
-## Explicación paso a paso
+La posición nueva sigue la ecuación del movimiento rectilíneo uniforme:
 
-### Caso base
-
-```Scala
-if (x <= 1) acumulador
+```math
+\vec{p}\,' = \vec{p} + \vec{v} \cdot dt
 ```
 
-Cuando `x` llega a `1`, la función retorna directamente el valor acumulado, evitando más llamadas.
+Las operaciones `+` y `*` son métodos de `Vector2`, definidos en `Modelo.scala`:
 
-### Caso recursivo
-
-```Scala
-loop(x - 1, acumulador * x)
+```scala
+def +(o: Vector2): Vector2 = Vector2(x + o.x, y + o.y)
+def *(k: Double): Vector2 = Vector2(x * k, y * k)
 ```
 
-En cada llamada:
+Por la precedencia de operadores de Scala, `*` se evalúa antes que `+`:
 
-* Se reduce el valor de `x` en 1.
-* Se multiplica el acumulador por `x` y se pasa a la siguiente iteración.
-* Como es recursión de cola, la llamada recursiva es la **última instrucción** en ejecutarse, lo que permite a Scala optimizar la pila.
+```scala
+p.pos + p.vel * dt   ==   p.pos.+(p.vel.*(dt))
+```
+
+Entonces, la evaluación ocurre en este orden:
+
+1. `p.vel * dt`: se escala la velocidad por el tiempo (el desplazamiento).
+2. `p.pos + (...)`: se suma el desplazamiento a la posición.
+3. `Particula(...)`: se construye la partícula nueva con la posición nueva,
+   la misma velocidad y la misma masa.
 
 ---
 
-## Llamados de pila en recursión de cola
+### Evaluación con el modelo de sustitución
 
 Ejemplo:
 
-```Scala
-factorial(5)
+```scala
+val p = Particula(Vector2(0, 0), Vector2(1, 2), 1.0)
+mover(p, 2.0)
 ```
 
-### Paso 1: Llamada inicial
+#### Paso 1: Llamada inicial
 
-```Scala
-loop(5, 1)
+```scala
+mover(Particula(Vector2(0, 0), Vector2(1, 2), 1.0), 2.0)
 ```
 
-### Paso 2: Primera iteración
+#### Paso 2: Se reemplaza el cuerpo de la función
 
-```Scala
-loop(4, 5)   // acumulador = 1 * 5
+```scala
+Particula(Vector2(0, 0) + Vector2(1, 2) * 2.0, Vector2(1, 2), 1.0)
 ```
 
-### Paso 3: Segunda iteración
+#### Paso 3: Se evalúa `*` (desplazamiento)
 
-```Scala
-loop(3, 20)  // acumulador = 5 * 4
+```scala
+Vector2(1, 2) * 2.0  →  Vector2(1 * 2.0, 2 * 2.0)  →  Vector2(2.0, 4.0)
 ```
 
-### Paso 4: Tercera iteración
+#### Paso 4: Se evalúa `+` (posición nueva)
 
-```Scala
-loop(2, 60)  // acumulador = 20 * 3
+```scala
+Vector2(0, 0) + Vector2(2.0, 4.0)  →  Vector2(0 + 2.0, 0 + 4.0)  →  Vector2(2.0, 4.0)
 ```
 
-### Paso 5: Cuarta iteración
+#### Paso 5: Se construye la partícula resultado
 
-```Scala
-loop(1, 120) // acumulador = 60 * 2
-```
-
-### Paso 6: Caso base
-
-```Scala
-return 120
+```scala
+Particula(Vector2(2.0, 4.0), Vector2(1, 2), 1.0)
 ```
 
 ---
 
-## Diferencia con recursión normal
+### Pila de llamados
 
-* En **recursión normal** cada llamada queda en la pila esperando a que termine la siguiente, lo que puede causar desbordamiento si `n` es muy grande.
-* En **recursión de cola**, el compilador transforma el proceso en un **bucle optimizado**, por lo que no se guarda cada llamada en la pila y el algoritmo puede ejecutarse para valores muy grandes sin problema.
-
----
-
-## Ejemplo de uso
-
-```Scala
-val resultado = factorial(5)
-println(resultado)  // 120
-```
-
-El resultado de `factorial(5)` es `120`.
-
-
-## Diagrama de llamados de pila con recursión de cola
+Como `mover` no es recursiva, la pila nunca crece más allá de tres niveles:
+la llamada a `mover`, y dentro de ella, una llamada a `*` y luego una a `+`.
+Cada una termina antes de que empiece la siguiente.
 
 ```mermaid
 sequenceDiagram
-    participant Main as factorial(5)
-    participant L1 as loop(5, 1)
-    participant L2 as loop(4, 5)
-    participant L3 as loop(3, 20)
-    participant L4 as loop(2, 60)
-    participant L5 as loop(1, 120)
+    participant M as mover(p, 2.0)
+    participant Por as Vector2(1,2) * 2.0
+    participant Mas as Vector2(0,0) + Vector2(2,4)
+    participant C as Particula(...)
 
-    Main->>L1: llamada inicial
-    L1->>L2: tail call con (4, 5)
-    L2->>L3: tail call con (3, 20)
-    L3->>L4: tail call con (2, 60)
-    L4->>L5: tail call con (1, 120)
-    L5-->>Main: return 120
+    M->>Por: calcula el desplazamiento
+    Por-->>M: Vector2(2.0, 4.0)
+    M->>Mas: suma a la posición
+    Mas-->>M: Vector2(2.0, 4.0)
+    M->>C: construye la partícula nueva
+    C-->>M: Particula(Vector2(2,4), Vector2(1,2), 1.0)
 ```
 
+---
 
+### Ejemplo de uso
+
+```scala
+val p = Particula(Vector2(0, 0), Vector2(1, 2), 1.0)
+val q = mover(p, 2.0)
+println(q.pos)  // Vector2(2.0,4.0)
+println(p.pos)  // Vector2(0.0,0.0), p no cambió
+```
+
+El resultado de `mover(p, 2.0)` es una partícula en `(2, 4)` con la misma
+velocidad `(1, 2)` y la misma masa `1.0`. La partícula original sigue igual.

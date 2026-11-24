@@ -207,4 +207,32 @@ class SimulacionParticulasTest extends AnyFunSuite {
     val candidatos = List(16, 128, 1024)
     assert(candidatos.contains(umbralConveniente(grande, 0.5, candidatos)))
   }
+
+  // Pruebas propias
+
+  test("mover: con velocidad negativa la partícula retrocede") {
+    val p = Particula(Vector2(5, 5), Vector2(-2, -1), 1.0)
+    assert(mover(p, 2.0).pos == Vector2(1, 3))
+  }
+
+  test("mover: con dt = 0 la partícula se queda donde estaba") {
+    val p = Particula(Vector2(7, -3), Vector2(10, 10), 2.0)
+    assert(mover(p, 0.0).pos == Vector2(7, -3))
+  }
+
+  test("mover: la velocidad y la masa no cambian") {
+    val p = Particula(Vector2(0, 0), Vector2(3, 4), 5.0)
+    val q = mover(p, 3.0)
+    assert(q.vel == Vector2(3, 4) && q.masa == 5.0)
+  }
+
+  test("mover: funciona con un dt decimal") {
+    val p = Particula(Vector2(1, 1), Vector2(4, -2), 1.0)
+    assert(mover(p, 0.5).pos == Vector2(3, 0))
+  }
+
+  test("mover: dos pasos de dt = 1 equivalen a un paso de dt = 2") {
+    val p = Particula(Vector2(0, 0), Vector2(3, 1), 1.0)
+    assert(mover(mover(p, 1.0), 1.0) == mover(p, 2.0))
+  }
 }

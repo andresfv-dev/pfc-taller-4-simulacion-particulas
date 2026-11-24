@@ -18,7 +18,9 @@ class SimulacionParticulas {
   // Punto 1: un paso de la simulación -----------------------------------------
 
   /** La posición nueva es la anterior más la velocidad por dt. */
-  def mover(p: Particula, dt: Double): Particula = ???
+  def mover(p: Particula, dt: Double): Particula = {
+    Particula(p.pos + p.vel*dt, p.vel,p.masa)
+  }
 
   /** Avanza todo el sistema un paso de tiempo dt. */
   def pasoSecuencial(s: Sistema, dt: Double): Sistema = ???
