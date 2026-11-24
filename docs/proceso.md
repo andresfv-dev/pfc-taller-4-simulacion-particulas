@@ -610,3 +610,170 @@ val r3 = pasoParalelo(tres, 2.0, 0)    // umb = 1, igual que r1
 println(r1.toList == pasoSecuencial(tres, 2.0).toList)  // true
 println(r2.toList == r1.toList && r3.toList == r1.toList)  // true
 ```
+
+---
+
+## 5. `energiaSecuencial`
+
+### Definición del algoritmo
+
+```scala
+def energiaSecuencial(s: Sistema): Double = {
+  s.map(p => 0.5 * p.masa * p.vel.norma * p.vel.norma).sum
+}
+```
+
+* La función `energiaSecuencial` calcula la energía cinética total del
+  sistema.
+* Recibe un parámetro, `s`: el sistema.
+* La energía de una partícula es media masa por la rapidez al cuadrado:
+  `0.5 * masa * rapidez * rapidez`. La rapidez es el tamaño del vector
+  velocidad, `vel.norma`, que en `Modelo.scala` es `√(x² + y²)`.
+* Usa `map` para calcular la energía de cada partícula y `sum` para sumarlas.
+* No modifica `s`. Si `s` está vacío, el resultado es `0.0`.
+
+### Explicación paso a paso
+
+1. `s.map(p => ...)` recorre las partículas y, para cada una, calcula
+   `0.5 * masa * norma * norma`. El resultado es un arreglo de números, uno
+   por partícula.
+2. `.sum` suma ese arreglo, empezando en `0.0`.
+
+Multiplicar la norma por sí misma da `x² + y²`, así que solo importa el tamaño
+de la velocidad, no su dirección: una partícula con velocidad `(3, 4)` y otra
+con `(-3, -4)` tienen la misma energía.
+
+---
+
+### Evaluación con el modelo de sustitución
+
+Ejemplo, con el sistema `tres` de la sección 2:
+
+```scala
+energiaSecuencial(tres)
+```
+
+#### Paso 1: Se reemplaza el cuerpo de la función
+
+```scala
+tres.map(p => 0.5 * p.masa * p.vel.norma * p.vel.norma).sum
+```
+
+#### Paso 2: Se calcula la norma de cada velocidad
+
+```scala
+Vector2(1, 0).norma   = √(1 + 0) = 1
+Vector2(0, -1).norma  = √(0 + 1) = 1
+Vector2(2, 2).norma   = √(4 + 4) = √8 ≈ 2.828
+```
+
+#### Paso 3: `map` calcula la energía de cada partícula
+
+```scala
+0.5 * 1.0 * 1 * 1     = 0.5
+0.5 * 2.0 * 1 * 1     = 1.0
+0.5 * 3.0 * √8 * √8   = 0.5 * 3.0 * 8 = 12.0
+→ Array(0.5, 1.0, 12.0)
+```
+
+#### Paso 4: `sum` suma los resultados
+
+```scala
+Array(0.5, 1.0, 12.0).sum
+→ 0.0 + 0.5 + 1.0 + 12.0
+→ 13.5
+```
+
+Con `Double`, `√8 * √8` da `8.000000000000002` y no `8` exacto, así que el
+resultado real puede diferir de `13.5` en la última cifra. Por eso las pruebas
+comparan con `cerca`.
+
+---
+
+### Diagrama de llamados
+
+```mermaid
+sequenceDiagram
+    participant E as energiaSecuencial(tres)
+    participant Map as tres.map
+    participant Sum as .sum
+
+    E->>Map: energía de cada partícula
+    Map-->>E: Array(0.5, 1.0, 12.0)
+    E->>Sum: suma
+    Sum-->>E: 13.5
+```
+
+---
+
+### Ejemplo de uso
+
+```scala
+println(energiaSecuencial(tres))                      // 13.5 (aprox.)
+println(energiaSecuencial(Array()))                   // 0.0
+println(energiaSecuencial(pasoSecuencial(tres, 3.0))) // 13.5: moverse no cambia la velocidad
+```
+
+---
+
+## 6. `masaTotal`
+
+### Definición del algoritmo
+
+```scala
+def masaTotal(s: Sistema): Double = {
+  s.map(p => p.masa).sum
+}
+```
+
+* La función `masaTotal` suma las masas de todas las partículas.
+* Recibe un parámetro, `s`: el sistema.
+* `map` saca la masa de cada partícula y `sum` las suma.
+* No modifica `s`. Si `s` está vacío, el resultado es `0.0`.
+
+### Explicación paso a paso
+
+1. `s.map(p => p.masa)` convierte el arreglo de partículas en un arreglo con
+   sus masas, en el mismo orden.
+2. `.sum` suma ese arreglo, empezando en `0.0`.
+
+La posición y la velocidad no se usan, así que mover el sistema no cambia su
+masa total.
+
+---
+
+### Evaluación con el modelo de sustitución
+
+```scala
+masaTotal(tres)
+→ tres.map(p => p.masa).sum
+→ Array(1.0, 2.0, 3.0).sum
+→ 0.0 + 1.0 + 2.0 + 3.0
+→ 6.0
+```
+
+---
+
+### Diagrama de llamados
+
+```mermaid
+sequenceDiagram
+    participant MT as masaTotal(tres)
+    participant Map as tres.map
+    participant Sum as .sum
+
+    MT->>Map: masa de cada partícula
+    Map-->>MT: Array(1.0, 2.0, 3.0)
+    MT->>Sum: suma
+    Sum-->>MT: 6.0
+```
+
+---
+
+### Ejemplo de uso
+
+```scala
+println(masaTotal(tres))                       // 6.0
+println(masaTotal(Array()))                    // 0.0
+println(masaTotal(pasoSecuencial(tres, 5.0)))  // 6.0: moverse no cambia la masa
+```

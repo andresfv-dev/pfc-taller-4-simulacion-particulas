@@ -315,4 +315,59 @@ class SimulacionParticulasTest extends AnyFunSuite {
   test("pasoParalelo: con un umbral impar conserva el orden de las partículas") {
     assert(pasoParalelo(grande, 0.5, 3).map(_.masa).toList == grande.map(_.masa).toList)
   }
+
+  // pruebas propias energiaSecuencial
+
+  test("energiaSecuencial: suma la energía de cada partícula") {
+    // 0.5*1*1 + 0.5*2*1 + 0.5*3*8 = 0.5 + 1 + 12
+    assert(cerca(energiaSecuencial(tres), 13.5))
+  }
+
+  test("energiaSecuencial: la dirección de la velocidad no importa") {
+    val haciaAtras = Particula(Vector2(0, 0), Vector2(-3, -4), 2.0)
+    assert(cerca(energiaSecuencial(Array(haciaAtras)), 25.0))
+  }
+
+  test("energiaSecuencial: el doble de masa da el doble de energía") {
+    val liviana = Particula(Vector2(0, 0), Vector2(1, 2), 1.0)
+    val pesada = Particula(Vector2(0, 0), Vector2(1, 2), 2.0)
+    assert(cerca(energiaSecuencial(Array(pesada)), 2 * energiaSecuencial(Array(liviana))))
+  }
+
+  test("energiaSecuencial: el doble de velocidad da cuatro veces la energía") {
+    val lenta = Particula(Vector2(0, 0), Vector2(1, 2), 1.0)
+    val rapida = Particula(Vector2(0, 0), Vector2(2, 4), 1.0)
+    assert(cerca(energiaSecuencial(Array(rapida)), 4 * energiaSecuencial(Array(lenta))))
+  }
+
+  test("energiaSecuencial: un paso de la simulación no cambia la energía") {
+    assert(cerca(energiaSecuencial(pasoSecuencial(tres, 3.0)), energiaSecuencial(tres)))
+  }
+
+  // pruebas propias masaTotal
+
+  test("masaTotal: suma las masas de tres") {
+    assert(cerca(masaTotal(tres), 6.0))
+  }
+
+  test("masaTotal: funciona con masas decimales") {
+    val sistema: Sistema = Array(
+      Particula(Vector2(0, 0), Vector2(0, 0), 0.5),
+      Particula(Vector2(1, 1), Vector2(0, 0), 0.25),
+      Particula(Vector2(2, 2), Vector2(0, 0), 0.25))
+    assert(cerca(masaTotal(sistema), 1.0))
+  }
+
+  test("masaTotal: no depende de las posiciones ni de las velocidades") {
+    assert(cerca(masaTotal(pasoSecuencial(tres, 5.0)), masaTotal(tres)))
+  }
+
+  test("masaTotal: la masa de dos partes suma la masa del todo") {
+    assert(cerca(masaTotal(tres.slice(0, 1)) + masaTotal(tres.slice(1, 3)), masaTotal(tres)))
+  }
+
+  test("masaTotal: en grande queda entre 1000 veces la mínima y la máxima") {
+    val m = masaTotal(grande)
+    assert(m >= 1000 * 0.1 && m <= 1000 * 5.1)
+  }
 }

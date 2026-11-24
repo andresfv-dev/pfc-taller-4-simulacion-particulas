@@ -625,3 +625,221 @@ Pruebas propias:
 | sistema vacío | `pasoParalelo(vacio, 1.0, 4)` | $()$ | caso $L = 0$ |
 | umbral negativo | `pasoParalelo(tres, 1.0, -5)` | igual al secuencial | $\text{umb} = \max(-5, 1) = 1$, termina |
 | umbral impar | `pasoParalelo(grande, 0.5, 3)` | masas en el mismo orden que `grande` | `++` conserva el orden aunque los tramos sean desiguales |
+
+---
+
+## 5. `energiaSecuencial`
+
+### Especificación
+
+La energía cinética de una partícula con masa $m$ y velocidad
+$\vec{v} = (v_x, v_y)$ es media masa por la rapidez al cuadrado:
+
+```math
+e(a) = \tfrac{1}{2}\, m\, |\vec{v}|^2 = \tfrac{1}{2}\, m\, (v_x^2 + v_y^2)
+```
+
+La energía del sistema $s = (a_0, \ldots, a_{n-1})$ es la suma de las
+energías de sus partículas:
+
+```math
+E(s) = \sum_{i=0}^{n-1} e(a_i)
+```
+
+Para el sistema vacío la suma no tiene términos y vale $0$.
+
+### Programa
+
+```scala
+def energiaSecuencial(s: Sistema): Double = {
+  s.map(p => 0.5 * p.masa * p.vel.norma * p.vel.norma).sum
+}
+```
+
+Hay que demostrar:
+
+```math
+\forall s : \text{energiaSecuencial}(s) == E(s)
+```
+
+### Comportamiento de `norma` y de `sum`
+
+`norma` está definida en `Vector2` como $\sqrt{x^2 + y^2}$. Como
+$x^2 + y^2 \geq 0$:
+
+```math
+\text{norma}(\vec{v}) \cdot \text{norma}(\vec{v}) = \left(\sqrt{v_x^2 + v_y^2}\right)^2 = v_x^2 + v_y^2 = |\vec{v}|^2
+```
+
+Así que la lambda calcula justo la energía de una partícula:
+
+```math
+0.5 \cdot m \cdot \text{norma}(\vec{v}) \cdot \text{norma}(\vec{v}) = \tfrac{1}{2}\, m\, |\vec{v}|^2 = e(a)
+```
+
+`sum` suma los elementos de una secuencia empezando en $0$:
+
+```math
+().\text{sum} = 0 \qquad (x_0, x_1, \ldots, x_k).\text{sum} = x_0 + (x_1, \ldots, x_k).\text{sum}
+```
+
+### Demostración por inducción sobre $n$, el tamaño del sistema
+
+**Caso base:** $n = 0$.
+
+```math
+\text{energiaSecuencial}(()) \rightarrow ().\text{map}(\ldots).\text{sum} \rightarrow ().\text{sum} \rightarrow 0 = E(())
+```
+
+**Caso de inducción:** $n = k + 1$. Hipótesis de inducción (HI):
+
+```math
+\text{energiaSecuencial}((a_1, \ldots, a_k)) == \sum_{i=1}^{k} e(a_i)
+```
+
+Entonces:
+
+```math
+\text{energiaSecuencial}((a_0, \ldots, a_k)) \rightarrow (a_0, \ldots, a_k).\text{map}(\ldots).\text{sum}
+```
+
+```math
+\rightarrow (e(a_0), e(a_1), \ldots, e(a_k)).\text{sum}
+```
+
+```math
+\rightarrow e(a_0) + (e(a_1), \ldots, e(a_k)).\text{sum}
+```
+
+```math
+\overset{HI}{=} e(a_0) + \sum_{i=1}^{k} e(a_i) = \sum_{i=0}^{k} e(a_i) = E((a_0, \ldots, a_k))
+```
+
+En el segundo paso se usa que `map` aplica la lambda a cada partícula y que
+la lambda calcula $e(a_i)$ (ver arriba). Concluimos que
+$\forall s : \text{energiaSecuencial}(s) == E(s)$.
+
+### Sobre los números reales y los `Double`
+
+La demostración es con números reales. Con `Double` hay redondeo: por ejemplo,
+$\sqrt{8} \cdot \sqrt{8}$ da $8{,}000000000000002$ y no $8$ exacto. Por eso las
+pruebas comparan con `cerca` (diferencia menor que $10^{-6}$) y no con `==`.
+
+### Terminación
+
+`map` recorre las $n$ partículas una vez y `sum` recorre los $n$ resultados
+una vez. Ningún paso es recursivo, así que termina después de $2n$ pasos.
+
+### Ausencia de efectos
+
+`map` construye un arreglo nuevo y la lambda solo lee la partícula, así que
+$s$ no se modifica.
+
+### Comprobación con las pruebas
+
+Pruebas dadas:
+
+| Prueba | Entrada | Esperado |
+|---|---|---|
+| media masa por velocidad al cuadrado | `s`: masa 2, velocidad $(3,4)$; masa 2, quieta | $\tfrac12 \cdot 2 \cdot 25 + 0 = 25$ |
+| sistema vacío | `vacio` | $0$ |
+| partícula quieta | `Array(s(1))` | $0$ |
+
+Pruebas propias:
+
+| Prueba | Entrada | Esperado | Qué comprueba |
+|---|---|---|---|
+| suma de cada partícula | `tres` | $0{,}5 + 1 + 12 = 13{,}5$ | la suma de la especificación |
+| dirección no importa | velocidad $(-3,-4)$, masa 2 | $25$ | $|\vec v|^2$ no depende del signo |
+| doble de masa | velocidad $(1,2)$, masas 1 y 2 | el doble | $e$ es proporcional a $m$ |
+| doble de velocidad | velocidades $(1,2)$ y $(2,4)$ | cuatro veces | $e$ crece con el cuadrado de $|\vec v|$ |
+| un paso no cambia la energía | `pasoSecuencial(tres, 3.0)` | $13{,}5$ | `mover` no cambia velocidad ni masa |
+
+---
+
+## 6. `masaTotal`
+
+### Especificación
+
+La masa total del sistema $s = (a_0, \ldots, a_{n-1})$, con $m_i$ la masa de
+$a_i$, es la suma de las masas:
+
+```math
+M(s) = \sum_{i=0}^{n-1} m_i
+```
+
+Para el sistema vacío vale $0$.
+
+### Programa
+
+```scala
+def masaTotal(s: Sistema): Double = {
+  s.map(p => p.masa).sum
+}
+```
+
+Hay que demostrar:
+
+```math
+\forall s : \text{masaTotal}(s) == M(s)
+```
+
+### Demostración por inducción sobre $n$
+
+Es la misma forma que la sección 5, cambiando $e(a_i)$ por $m_i$.
+
+**Caso base:** $n = 0$.
+
+```math
+\text{masaTotal}(()) \rightarrow ().\text{map}(p \Rightarrow p.\text{masa}).\text{sum} \rightarrow ().\text{sum} \rightarrow 0 = M(())
+```
+
+**Caso de inducción:** $n = k + 1$, con HI
+$\text{masaTotal}((a_1, \ldots, a_k)) == \sum_{i=1}^{k} m_i$:
+
+```math
+\text{masaTotal}((a_0, \ldots, a_k)) \rightarrow (m_0, m_1, \ldots, m_k).\text{sum}
+\rightarrow m_0 + (m_1, \ldots, m_k).\text{sum}
+```
+
+```math
+\overset{HI}{=} m_0 + \sum_{i=1}^{k} m_i = \sum_{i=0}^{k} m_i = M((a_0, \ldots, a_k))
+```
+
+Concluimos que $\forall s : \text{masaTotal}(s) == M(s)$.
+
+### Consecuencia: la masa de las partes suma la del todo
+
+Si se parte un sistema en dos tramos $x$ y $y$, la suma de todas las masas es
+la suma de las masas de cada tramo:
+
+```math
+M(x \mathbin{+\!\!+} y) = M(x) + M(y)
+```
+
+Esto es lo que permitirá calcular la masa (y la energía, que cumple lo mismo)
+en paralelo en el punto 3: cada mitad calcula su parte y se suman.
+
+### Terminación y ausencia de efectos
+
+Igual que en la sección 5: `map` y `sum` recorren $n$ elementos una vez cada
+uno, y $s$ no se modifica.
+
+### Comprobación con las pruebas
+
+Pruebas dadas:
+
+| Prueba | Entrada | Esperado |
+|---|---|---|
+| suma las masas | `s`: masas 2 y 2 | $4$ |
+| sistema vacío | `vacio` | $0$ |
+
+Pruebas propias:
+
+| Prueba | Entrada | Esperado | Qué comprueba |
+|---|---|---|---|
+| suma de `tres` | masas 1, 2, 3 | $6$ | la suma de la especificación |
+| masas decimales | $0{,}5$, $0{,}25$, $0{,}25$ | $1$ | funciona con decimales |
+| no depende del movimiento | `pasoSecuencial(tres, 5.0)` | $6$ | solo cuentan las masas |
+| partes y todo | `tres` partido en $[0,1)$ y $[1,3)$ | $1 + 5 = 6$ | $M(x \mathbin{+\!\!+} y) = M(x) + M(y)$ |
+| rango en `grande` | 1000 masas entre $0{,}1$ y $5{,}1$ | entre $100$ y $5100$ | cota de la suma |
