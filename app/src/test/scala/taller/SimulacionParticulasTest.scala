@@ -208,7 +208,7 @@ class SimulacionParticulasTest extends AnyFunSuite {
     assert(candidatos.contains(umbralConveniente(grande, 0.5, candidatos)))
   }
 
-  // Pruebas propias
+  // Pruebas propia
 
   test("mover: con velocidad negativa la partícula retrocede") {
     val p = Particula(Vector2(5, 5), Vector2(-2, -1), 1.0)
@@ -234,5 +234,36 @@ class SimulacionParticulasTest extends AnyFunSuite {
   test("mover: dos pasos de dt = 1 equivalen a un paso de dt = 2") {
     val p = Particula(Vector2(0, 0), Vector2(3, 1), 1.0)
     assert(mover(mover(p, 1.0), 1.0) == mover(p, 2.0))
+  }
+  // pruebas propias pasoSecuencial
+
+  val tres: Sistema = Array(
+    Particula(Vector2(0, 0), Vector2(1, 0), 1.0),
+    Particula(Vector2(2, 2), Vector2(0, -1), 2.0),
+    Particula(Vector2(-1, 3), Vector2(2, 2), 3.0))
+
+  test("pasoSecuencial: cada partícula se mueve con su propia velocidad") {
+    val r = pasoSecuencial(tres, 2.0)
+    assert(r(0).pos == Vector2(2, 0) && r(1).pos == Vector2(2, 0) && r(2).pos == Vector2(3, 7))
+  }
+
+  test("pasoSecuencial: el sistema conserva su tamaño") {
+    assert(pasoSecuencial(tres, 1.0).length == 3)
+  }
+
+  test("pasoSecuencial: las partículas quedan en el mismo orden") {
+    assert(pasoSecuencial(tres, 1.0).map(_.masa).toList == List(1.0, 2.0, 3.0))
+  }
+
+  test("pasoSecuencial: no modifica el sistema original") {
+    pasoSecuencial(tres, 5.0)
+    assert(tres(0).pos == Vector2(0, 0) && tres(2).pos == Vector2(-1, 3))
+  }
+
+  test("pasoSecuencial: si ninguna partícula tiene velocidad el sistema queda igual") {
+    val quietas: Sistema = Array(
+      Particula(Vector2(1, 1), Vector2(0, 0), 1.0),
+      Particula(Vector2(4, -2), Vector2(0, 0), 2.0))
+    assert(pasoSecuencial(quietas, 10.0).toList == quietas.toList)
   }
 }

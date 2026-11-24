@@ -23,7 +23,9 @@ class SimulacionParticulas {
   }
 
   /** Avanza todo el sistema un paso de tiempo dt. */
-  def pasoSecuencial(s: Sistema, dt: Double): Sistema = ???
+  def pasoSecuencial(s: Sistema, dt: Double): Sistema = {
+    s.map(p => mover(p, dt))
+  }
 
   /** Avanza solo el tramo entre `desde` incluido y `hasta` excluido. */
   def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = ???
