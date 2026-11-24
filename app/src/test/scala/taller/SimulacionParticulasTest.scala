@@ -293,4 +293,26 @@ class SimulacionParticulasTest extends AnyFunSuite {
     pasoSegmento(tres, 5.0, 0, 3)
     assert(tres(0).pos == Vector2(0, 0) && tres(1).pos == Vector2(2, 2) && tres(2).pos == Vector2(-1, 3))
   }
+
+  // pruebas propias pasoParalelo
+
+  test("pasoParalelo: con umbral 1 parte hasta cada partícula y da lo mismo que el secuencial") {
+    assert(pasoParalelo(tres, 2.0, 1).toList == pasoSecuencial(tres, 2.0).toList)
+  }
+
+  test("pasoParalelo: con umbral mayor que el sistema no parte y da lo mismo que el secuencial") {
+    assert(pasoParalelo(tres, 2.0, 100).toList == pasoSecuencial(tres, 2.0).toList)
+  }
+
+  test("pasoParalelo: sobre el sistema vacío da un sistema vacío") {
+    assert(pasoParalelo(vacio, 1.0, 4).isEmpty)
+  }
+
+  test("pasoParalelo: con umbral negativo no se queda sin fondo") {
+    assert(pasoParalelo(tres, 1.0, -5).toList == pasoSecuencial(tres, 1.0).toList)
+  }
+
+  test("pasoParalelo: con un umbral impar conserva el orden de las partículas") {
+    assert(pasoParalelo(grande, 0.5, 3).map(_.masa).toList == grande.map(_.masa).toList)
+  }
 }

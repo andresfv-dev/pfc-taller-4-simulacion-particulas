@@ -411,3 +411,217 @@ de 1000 partículas:
 | dos tramos unidos | cortes $m = 0, 1, 2, 3$, $dt = 1.5$ | `tramo(0, m) ++ tramo(m, 3)` igual al paso completo | el lema: no se pierde ni se repite nada |
 | tamaño | `pasoSegmento(grande, 0.5, 100, 350)` | 250 partículas | el resultado tiene $k - d$ elementos |
 | sin efectos | `pasoSegmento(tres, 5.0, 0, 3)` | `tres` sigue en $(0,0)$, $(2,2)$, $(-1,3)$ | `s` no se modifica |
+
+---
+
+## 4. `pasoParalelo`
+
+### Especificación
+
+`pasoParalelo` debe calcular **lo mismo** que `pasoSecuencial`, sin importar
+el umbral; lo único que cambia es cómo se reparte el trabajo. Con
+$s = (a_0, \ldots, a_{n-1})$ y cualquier entero $\text{umbral}$:
+
+```math
+\text{pasoParalelo}(s, dt, \text{umbral}) == g(s, dt) = (f(a_0, dt), \ldots, f(a_{n-1}, dt))
+```
+
+### Programa
+
+```scala
+def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = {
+  val umb = math.max(umbral, 1)
+  def resolver(desde: Int, hasta: Int): Sistema =
+    if (hasta - desde <= umb) pasoSegmento(s, dt, desde, hasta)
+    else {
+      val medio = desde + (hasta - desde) / 2
+      val (izq, der) = parallel(resolver(desde, medio), resolver(medio, hasta))
+      izq ++ der
+    }
+  resolver(0, s.length)
+}
+```
+
+Hay que demostrar:
+
+```math
+\forall s, \forall dt, \forall \text{umbral} \in \mathbb{Z} : \text{pasoParalelo}(s, dt, \text{umbral}) == g(s, dt)
+```
+
+### Comportamiento de `parallel`
+
+`parallel(a, b)` evalúa `a` en el hilo actual y `b` en otra tarea del
+`ForkJoinPool`, espera a las dos y devuelve el par `(a, b)`. Si ninguna de las
+dos expresiones tiene efectos, el resultado es el mismo que evaluarlas en
+secuencia:
+
+```math
+\text{parallel}(a, b) == (a, b)
+```
+
+`resolver` no tiene efectos: solo lee $s$ (que nadie modifica) y construye
+arreglos nuevos (secciones 1 y 3). Por eso, para razonar sobre el **valor** de
+`pasoParalelo` se puede reemplazar `parallel` por el par, y el orden en que
+terminen los hilos no importa.
+
+### El umbral corregido $\text{umb}$
+
+Sea $\text{umb} = \max(\text{umbral}, 1)$. Entonces $\text{umb} \geq 1$ para cualquier umbral,
+incluso $0$ o negativo. Esto es lo que garantiza la terminación (ver abajo).
+
+### Lema: `resolver` calcula el segmento
+
+```math
+\forall d, k \text{ con } 0 \leq d \leq k \leq n : \text{resolver}(d, k) == \text{pasoSegmento}(s, dt, d, k)
+```
+
+**Demostración por inducción fuerte sobre $L = k - d$**, el tamaño del tramo.
+Hipótesis de inducción (HI): el lema vale para todo tramo de tamaño menor que
+$L$.
+
+**Caso base: $L \leq \text{umb}$.** La condición del `if` es verdadera:
+
+```math
+\text{resolver}(d, k) \rightarrow \text{pasoSegmento}(s, dt, d, k)
+```
+
+Esto incluye el tramo vacío, $L = 0$.
+
+**Caso de inducción: $L > \text{umb}$.** Como $\text{umb} \geq 1$, se tiene $L \geq 2$. Sea
+
+```math
+m = d + \left\lfloor \tfrac{L}{2} \right\rfloor
+```
+
+Como $L \geq 2$, $1 \leq \lfloor L/2 \rfloor \leq L - 1$, así que
+$d < m < k$. Los dos subtramos tienen tamaños $m - d \geq 1$ y $k - m \geq 1$,
+ambos **estrictamente menores** que $L$. Evaluando:
+
+```math
+\text{resolver}(d, k) \rightarrow \text{izq} \mathbin{+\!\!+} \text{der}
+\quad\text{con}\quad (\text{izq}, \text{der}) = \text{parallel}(\text{resolver}(d, m), \text{resolver}(m, k))
+```
+
+Por el comportamiento de `parallel`:
+
+```math
+\rightarrow \text{resolver}(d, m) \mathbin{+\!\!+} \text{resolver}(m, k)
+```
+
+Por la HI aplicada a los dos subtramos:
+
+```math
+\rightarrow \text{pasoSegmento}(s, dt, d, m) \mathbin{+\!\!+} \text{pasoSegmento}(s, dt, m, k)
+```
+
+Y por el lema de la sección 3 (partir un tramo no pierde ni repite
+partículas), con $d \leq m \leq k$:
+
+```math
+= \text{pasoSegmento}(s, dt, d, k)
+```
+
+Lo que concluye el caso de inducción.
+
+### Teorema
+
+`pasoParalelo` llama a $\text{resolver}(0, n)$. Por el lema, con $d = 0$ y
+$k = n$, y por la sección 3:
+
+```math
+\text{pasoParalelo}(s, dt, \text{umbral}) \rightarrow \text{resolver}(0, n) == \text{pasoSegmento}(s, dt, 0, n) == h(s, dt, 0, n) = g(s, dt)
+```
+
+Como $s$, $dt$ y $\text{umbral}$ eran arbitrarios:
+
+```math
+\forall s, \forall dt, \forall \text{umbral} : \text{pasoParalelo}(s, dt, \text{umbral}) == \text{pasoSecuencial}(s, dt)
+```
+
+### La combinación `++` es asociativa
+
+Según el umbral, el árbol de llamados agrupa las concatenaciones de formas
+distintas. Por ejemplo, con 3 tramos $x, y, z$ puede quedar
+$(x \mathbin{+\!\!+} y) \mathbin{+\!\!+} z$ o
+$x \mathbin{+\!\!+} (y \mathbin{+\!\!+} z)$. Que todos los umbrales den el
+mismo resultado se apoya en que `++` es asociativa:
+
+```math
+\forall x, y, z : (x \mathbin{+\!\!+} y) \mathbin{+\!\!+} z == x \mathbin{+\!\!+} (y \mathbin{+\!\!+} z)
+```
+
+con $()$ como elemento neutro. Se usa cómo se comporta `++`:
+
+```math
+() \mathbin{+\!\!+} y = y \qquad (a :: x') \mathbin{+\!\!+} y = a :: (x' \mathbin{+\!\!+} y)
+```
+
+**Demostración por inducción sobre $x$.**
+
+*Caso base*, $x = ()$:
+
+```math
+(() \mathbin{+\!\!+} y) \mathbin{+\!\!+} z = y \mathbin{+\!\!+} z = () \mathbin{+\!\!+} (y \mathbin{+\!\!+} z)
+```
+
+*Caso de inducción*, $x = a :: x'$, con HI
+$(x' \mathbin{+\!\!+} y) \mathbin{+\!\!+} z == x' \mathbin{+\!\!+} (y \mathbin{+\!\!+} z)$:
+
+```math
+((a :: x') \mathbin{+\!\!+} y) \mathbin{+\!\!+} z
+= (a :: (x' \mathbin{+\!\!+} y)) \mathbin{+\!\!+} z
+= a :: ((x' \mathbin{+\!\!+} y) \mathbin{+\!\!+} z)
+```
+
+```math
+\overset{HI}{=} a :: (x' \mathbin{+\!\!+} (y \mathbin{+\!\!+} z))
+= (a :: x') \mathbin{+\!\!+} (y \mathbin{+\!\!+} z)
+```
+
+Nótese que `++` **no** es conmutativa: $x \mathbin{+\!\!+} y \neq y \mathbin{+\!\!+} x$
+en general. No hace falta que lo sea, porque `parallel` devuelve el par en el
+orden en que se le pasaron las expresiones (`izq` primero, `der` después),
+aunque `der` termine antes. Por eso se conserva el orden de las partículas.
+
+### Terminación
+
+En cada llamado recursivo el tamaño $L = k - d$ baja estrictamente (caso de
+inducción: los subtramos miden entre $1$ y $L - 1$), y $L$ es un natural. Una
+sucesión estrictamente decreciente de naturales es finita, así que toda rama
+del árbol llega a un tramo con $L \leq \text{umb}$ y termina en `pasoSegmento`, que
+termina (sección 3).
+
+Aquí es donde hace falta $\text{umb} \geq 1$. Si se usara `umbral` directamente con
+$\text{umbral} = 0$, un tramo de tamaño $L = 1$ no cumple $1 \leq 0$, se
+parte en $m = d + \lfloor 1/2 \rfloor = d$ y produce
+$\text{resolver}(d, d+1)$, **el mismo llamado**: $L$ no baja y la recursión no
+termina (`StackOverflowError`). Con $\text{umb} = \max(\text{umbral}, 1)$, todo tramo
+de tamaño $1$ es caso base.
+
+### Ausencia de efectos y ausencia de carreras
+
+Los hilos solo **leen** $s$ y cada uno escribe en arreglos nuevos propios (los
+que crean `slice`, `map` y `++`). Dos hilos nunca escriben en el mismo arreglo
+y $s$ no se modifica, así que no hay condiciones de carrera y el resultado no
+depende de cómo el `ForkJoinPool` reparta las tareas.
+
+### Comprobación con las pruebas
+
+Pruebas dadas:
+
+| Prueba | Entrada | Esperado |
+|---|---|---|
+| caso simple | `pasoParalelo(Array(p), 2.0, 1)` | pos $(2, 4)$ |
+| varios umbrales | `grande`, umbrales $1, 2, 7, 64, 1000, 5000$ | igual al secuencial |
+| orden y tamaño | `grande`, umbral $32$ | $1000$ partículas |
+| umbral cero | `Array(p)`, umbral $0$ | $1$ partícula, sin desbordar la pila |
+
+Pruebas propias:
+
+| Prueba | Entrada | Esperado | Qué comprueba |
+|---|---|---|---|
+| umbral 1 | `pasoParalelo(tres, 2.0, 1)` | igual a `pasoSecuencial(tres, 2.0)` | el árbol más profundo: cada hoja es una partícula |
+| umbral mayor que $n$ | `pasoParalelo(tres, 2.0, 100)` | igual al secuencial | caso base directo, sin partir |
+| sistema vacío | `pasoParalelo(vacio, 1.0, 4)` | $()$ | caso $L = 0$ |
+| umbral negativo | `pasoParalelo(tres, 1.0, -5)` | igual al secuencial | $\text{umb} = \max(-5, 1) = 1$, termina |
+| umbral impar | `pasoParalelo(grande, 0.5, 3)` | masas en el mismo orden que `grande` | `++` conserva el orden aunque los tramos sean desiguales |
