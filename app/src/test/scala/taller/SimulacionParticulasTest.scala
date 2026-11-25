@@ -371,3 +371,141 @@ class SimulacionParticulasTest extends AnyFunSuite {
     assert(m >= 1000 * 0.1 && m <= 1000 * 5.1)
   }
 }
+
+@RunWith(classOf[JUnitRunner])
+class SimulacionParticulasPuntos3y4Test extends AnyFunSuite {
+
+  val sim = new SimulacionParticulas()
+  import sim._
+
+  def cerca(a: Double, b: Double): Boolean = Math.abs(a - b) < 1e-6
+
+  def cerca(a: Vector2, b: Vector2): Boolean =
+    Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6
+
+  // pruebas propias punto 3
+
+  test("energiaParalela: cinco partículas con masas y velocidades distintas") {
+    val sistema: Sistema = Array(
+      Particula(Vector2(1, 2), Vector2(-2, 0), 0.5),
+      Particula(Vector2(3, 1), Vector2(0, 3), 2.0),
+      Particula(Vector2(0, 4), Vector2(1, 2), 4.0),
+      Particula(Vector2(-1, 2), Vector2(7, 0), 0.0),
+      Particula(Vector2(2, -3), Vector2(0, 0), 3.0))
+    // 1 + 9 + 10 + 0 + 0 = 20
+    assert(List(-4, 0, 1, 2, 5, 9).forall(u => cerca(energiaParalela(sistema, u), 20.0)))
+  }
+
+  test("energiaParalela: cambiar las posiciones no cambia la energía ni el original") {
+    val sistema: Sistema = Array(
+      Particula(Vector2(-2, 1), Vector2(0, -2), 3.0),
+      Particula(Vector2(4, 3), Vector2(4, 0), 0.25))
+    val original = sistema.toList
+    val trasladado = sistema.map(p => Particula(p.pos + Vector2(10, -7), p.vel, p.masa))
+    assert(cerca(energiaParalela(sistema, 1), 8.0))
+    assert(cerca(energiaParalela(trasladado, 1), 8.0))
+    assert(sistema.toList == original)
+  }
+
+  test("centroDeMasaParalelo: combina masas distintas en las dos coordenadas") {
+    val sistema: Sistema = Array(
+      Particula(Vector2(-4, 2), Vector2(1, 0), 2.0),
+      Particula(Vector2(2, -2), Vector2(0, 1), 1.0),
+      Particula(Vector2(6, 4), Vector2(-1, 0), 3.0))
+    // Suma ponderada (12, 14), masa 6
+    assert(List(-3, 0, 1, 2, 3, 8).forall { u =>
+      cerca(centroDeMasaParalelo(sistema, u), Vector2(2.0, 7.0 / 3.0))
+    })
+  }
+
+  test("centroDeMasaParalelo: una mitad sin masa no altera la otra") {
+    val sistema: Sistema = Array(
+      Particula(Vector2(100, -100), Vector2(0, 0), 0.0),
+      Particula(Vector2(-50, 80), Vector2(0, 0), 0.0),
+      Particula(Vector2(-3, 5), Vector2(0, 0), 0.5),
+      Particula(Vector2(1, 1), Vector2(0, 0), 1.5))
+    val original = sistema.toList
+    assert(cerca(centroDeMasaParalelo(sistema, 2), Vector2(0, 2)))
+    assert(sistema.toList == original)
+  }
+
+  test("centroDeMasaParalelo: partículas sin masa lejos del origen dan el origen") {
+    val sistema: Sistema = Array(
+      Particula(Vector2(8, -2), Vector2(1, 1), 0.0),
+      Particula(Vector2(-6, 9), Vector2(2, 0), 0.0),
+      Particula(Vector2(3, 7), Vector2(0, 4), 0.0))
+    assert(List(0, 1, 2, 7).forall(u => centroDeMasaParalelo(sistema, u) == Vector2(0, 0)))
+  }
+
+  // pruebas propias punto 4
+
+  test("trabajo: el sistema vacío y un tamaño grande conservan su número de operaciones") {
+    assert(trabajo(0) == 0 && trabajo(Int.MaxValue) == Int.MaxValue)
+  }
+
+  test("profundidad: la mitad de once puede costar más que la de doce") {
+    assert(profundidad(11, 5) == 6 && profundidad(12, 5) == 5)
+    assert(profundidad(23, 5) == 7)
+  }
+
+  test("profundidad: un tamaño impar conserva el elemento sobrante al dividir") {
+    assert(profundidad(9, 2) == 5)
+  }
+
+  test("profundidad: el vacío cuesta cero y los umbrales no positivos terminan") {
+    assert(List(-2, 0, 1, 4).forall(u => profundidad(0, u) == 0))
+    assert(List(-2, 0, 1).forall(u => profundidad(5, u) == 4))
+  }
+
+  test("tiempoEstimado: conserva la fracción del trabajo entre procesadores") {
+    assert(cerca(tiempoEstimado(13, 8, 3), 6.625))
+    assert(cerca(tiempoEstimado(0, 3, 2), 0.0))
+  }
+}
+
+@RunWith(classOf[JUnitRunner])
+class SimulacionParticulasPunto5Test extends AnyFunSuite {
+
+  val sim = new SimulacionParticulas()
+
+  test("aceleracion: una mejora decimal conserva la fracción") {
+    assert(math.abs(sim.aceleracion(7.5, 3.0) - 2.5) < 1e-9)
+  }
+
+  test("aceleracion: un paralelo más lento da menos de uno") {
+    assert(sim.aceleracion(12.0, 48.0) == 0.25)
+  }
+
+  test("aceleracion: cambiar la unidad de ambos tiempos conserva el cociente") {
+    assert(math.abs(sim.aceleracion(18.0, 6.0) - sim.aceleracion(0.018, 0.006)) < 1e-9)
+  }
+
+  test("umbralConveniente: sin candidatos devuelve el tamaño, vacío o impar, sin medir") {
+    val sinMedicion = new SimulacionParticulas() {
+      override def medir[A](repeticiones: Int)(cuerpo: => A): Double =
+        fail("La lista vacía no necesita mediciones")
+    }
+    assert(sinMedicion.umbralConveniente(Array.empty[Particula], 0.5, Nil) == 0)
+    val sistema = Array.fill(7)(Particula(Vector2(1, 2), Vector2(3, 4), 2.0))
+    assert(sinMedicion.umbralConveniente(sistema, 2.0, Nil) == 7)
+  }
+
+  test("umbralConveniente: mide el paso completo con el sistema y dt recibidos") {
+    val sistema = Array(
+      Particula(Vector2(1, 2), Vector2(-2, 3), 2.0),
+      Particula(Vector2(-4, 0), Vector2(1, -1), 3.0))
+    val original = sistema.toList
+    val comprobacion = new SimulacionParticulas() {
+      override def medir[A](repeticiones: Int)(cuerpo: => A): Double = {
+        assert(repeticiones == 3)
+        assert(cuerpo.asInstanceOf[Sistema].toList == List(
+          Particula(Vector2(-3, 8), Vector2(-2, 3), 2.0),
+          Particula(Vector2(-2, -2), Vector2(1, -1), 3.0)))
+        1.0
+      }
+    }
+    assert(comprobacion.umbralConveniente(sistema, 2.0, List(1)) == 1)
+    assert(sistema.toList == original)
+  }
+
+}

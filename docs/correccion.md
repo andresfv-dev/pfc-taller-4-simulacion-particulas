@@ -438,7 +438,7 @@ def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = {
       val (izq, der) = parallel(resolver(desde, medio), resolver(medio, hasta))
       izq ++ der
     }
-  resolver(0, s.length)
+  if (s.length <= umb) pasoSecuencial(s, dt) else resolver(0, s.length)
 }
 ```
 
@@ -525,6 +525,9 @@ Lo que concluye el caso de inducción.
 
 ### Teorema
 
+Si $n \leq \text{umb}$, llama a `pasoSecuencial(s, dt)`, que calcula $g(s, dt)$
+por la sección 2. Esta guarda mínima añadida para el control de P5 evita
+copiar todo el arreglo cuando no se divide. Si $n > \text{umb}$,
 `pasoParalelo` llama a $\text{resolver}(0, n)$. Por el lema, con $d = 0$ y
 $k = n$, y por la sección 3:
 
@@ -843,3 +846,355 @@ Pruebas propias:
 | no depende del movimiento | `pasoSecuencial(tres, 5.0)` | $6$ | solo cuentan las masas |
 | partes y todo | `tres` partido en $[0,1)$ y $[1,3)$ | $1 + 5 = 6$ | $M(x \mathbin{+\!\!+} y) = M(x) + M(y)$ |
 | rango en `grande` | 1000 masas entre $0{,}1$ y $5{,}1$ | entre $100$ y $5100$ | cota de la suma |
+
+---
+
+## 7. `energiaParalela` (punto 3)
+
+### Especificación y programa
+
+Se conserva la especificación $E(s)$ de la sección 5:
+
+```math
+E(s) = \sum_{i=0}^{n-1} \tfrac12 m_i |\vec v_i|^2
+```
+
+El programa completo está en la sección 7 de `proceso.md`. Su auxiliar local
+`resolver(d, k)` usa `energiaSecuencial(s.slice(d, k))` si el tramo mide a lo
+sumo `umb = math.max(umbral, 1)`; de lo contrario usa `parallel` y suma
+`izq + der`. Hay que demostrar que devuelve $E(s)$ para cualquier umbral.
+
+### Demostración por inducción fuerte sobre $L = k - d$
+
+**Caso base: $L \leq \text{umb}$.** La función secuencial ya demostrada
+calcula exactamente la suma del tramo:
+
+```math
+\text{resolver}(d,k) \rightarrow E(s[d:k])
+```
+
+Para $L = 0$, la suma vacía vale cero.
+
+**Caso de inducción: $L > \text{umb}$.** Como $\text{umb} \geq 1$, ambos
+subtramos son menores que $L$. Sea $m = d + \lfloor L/2 \rfloor$. Por la HI
+en las dos ramas de `parallel`:
+
+```math
+\text{resolver}(d,k)
+\rightarrow \text{resolver}(d,m) + \text{resolver}(m,k)
+= \sum_{i=d}^{m-1} e(a_i) + \sum_{i=m}^{k-1} e(a_i)
+= \sum_{i=d}^{k-1} e(a_i)
+```
+
+Los intervalos son disjuntos y cubren el tramo, incluso si $L$ es impar.
+La llamada inicial `resolver(0, s.length)` calcula entonces $E(s)$.
+
+### Combinación, terminación y ausencia de efectos
+
+Sobre los reales, la suma es asociativa y tiene neutro cero:
+
+```math
+(a+b)+c = a+(b+c), \qquad a+0 = a
+```
+
+Con `Double`, reagrupar puede cambiar el redondeo; por eso las pruebas usan
+`cerca` y la igualdad matemática no exige igualdad bit a bit.
+
+Cada división reduce estrictamente $L$ hasta una hoja, incluidas las entradas
+con umbral cero o negativo gracias a `umb`. Las hojas son cálculos finitos.
+Solo se lee `s`; `slice` crea recortes propios y no hay acumuladores
+compartidos entre tareas.
+
+---
+
+## 8. `centroDeMasaParalelo` (punto 3)
+
+### Especificación y programa
+
+Sean $\vec r_i$ la posición y $m_i$ la masa de la partícula $i$:
+
+```math
+Q(s) = \sum_{i=0}^{n-1} m_i \vec r_i, \qquad
+M(s) = \sum_{i=0}^{n-1} m_i, \qquad
+C(s) = \begin{cases}
+\vec 0 & M(s)=0,\\
+Q(s)/M(s) & M(s)\ne 0.
+\end{cases}
+```
+
+El programa de la sección 8 de `proceso.md` calcula el par $(Q,M)$ con un
+`foldLeft` en las hojas y lo combina con
+`(izq._1 + der._1, izq._2 + der._2)`. Después comprueba `masa == 0.0` o
+calcula `suma * (1.0 / masa)`. Hay que demostrar que devuelve $C(s)$.
+
+### Lema: el auxiliar devuelve la suma ponderada y la masa
+
+**Dentro de una hoja.** Tras procesar $j$ partículas del tramo, el par del
+`foldLeft` es:
+
+```math
+\left(\sum_{i=d}^{d+j-1} m_i\vec r_i,\ \sum_{i=d}^{d+j-1}m_i\right)
+```
+
+Para $j=0$ coincide con `(Vector2(0, 0), 0.0)`. Al incorporar la siguiente
+partícula, el cuerpo suma $m_{d+j}\vec r_{d+j}$ y $m_{d+j}$ a cada componente,
+respectivamente. Por inducción sobre $j$, el par final es $(Q,M)$ del tramo.
+
+**Entre ramas.** Por inducción fuerte sobre el tamaño del tramo, suponemos
+que ambos hijos devuelven sus pares correctos. Combinarlos suma todos los
+términos exactamente una vez:
+
+```math
+(Q(s[d:m])+Q(s[m:k]),\ M(s[d:m])+M(s[m:k]))
+= (Q(s[d:k]),\ M(s[d:k]))
+```
+
+El caso base es la hoja demostrada arriba. Por tanto, `resolver(0, s.length)`
+devuelve $(Q(s),M(s))$. Si $M(s)=0$ se devuelve el origen; en otro caso,
+`suma * (1.0 / masa)` es $Q(s)/M(s)$, como exige la especificación.
+
+### Asociatividad de la combinación
+
+Definimos $(Q_1,M_1) \oplus (Q_2,M_2) = (Q_1+Q_2,M_1+M_2)$. Entonces:
+
+```math
+((Q_1,M_1)\oplus(Q_2,M_2))\oplus(Q_3,M_3)
+= ((Q_1+Q_2)+Q_3,(M_1+M_2)+M_3)
+= (Q_1+(Q_2+Q_3),M_1+(M_2+M_3))
+= (Q_1,M_1)\oplus((Q_2,M_2)\oplus(Q_3,M_3))
+```
+
+El neutro es $(\vec 0,0)$. La demostración es sobre los reales; las
+coordenadas y masas `Double` tienen las mismas limitaciones de redondeo que
+la energía. La división no forma parte de $\oplus$: hacerla antes perdería
+la información necesaria para combinar mitades con masas diferentes.
+
+### Terminación y ausencia de efectos
+
+Las divisiones reducen el tamaño hasta `umb`, como en la sección 7. Cada
+`foldLeft` recorre un tramo finito; incluso la hoja vacía devuelve su neutro.
+Los pares y los vectores son valores nuevos. No se escribe en `s` y una rama
+sin masa no provoca una división entre cero.
+
+### Comprobación con las cinco pruebas propias de P3
+
+Están en `SimulacionParticulasPuntos3y4Test`, dentro del archivo de pruebas
+existente. No usan `centroDeMasaSecuencial` como resultado esperado.
+
+| Prueba | Entrada | Esperado | Qué comprueba |
+|---|---|---|---|
+| energía de cinco partículas | masas $0{,}5,2,4,0,3$, velocidades $(-2,0),(0,3),(1,2),(7,0),(0,0)$ | $1+9+10=20$ | tamaño impar, masa cero y umbrales $-4,0,1,2,5,9$ |
+| cambio de posiciones | energías $6$ y $2$, traslación $(10,-7)$ | $8$ en ambos sistemas | independencia de la posición y conservación del original |
+| centro en dos coordenadas | posiciones $(-4,2),(2,-2),(6,4)$, masas $2,1,3$ | $(2,7/3)$ | ponderación y umbrales $-3,0,1,2,3,8$ |
+| mitad sin masa | dos masas cero, luego $0{,}5$ en $(-3,5)$ y $1{,}5$ en $(1,1)$ | $(0,2)$ | combinación con el neutro y conservación del original |
+| sistema no vacío sin masa | tres posiciones distintas, masas cero | origen | protección de la división final |
+
+Las pruebas dadas también cubren el vacío y comparan energías de un sistema
+grande. La prueba dada que obtiene el centro esperado llamando al centro
+secuencial depende de que se complete P2.
+
+---
+
+## 9. `trabajo` (punto 4)
+
+### Especificación, programa y demostración
+
+Para $n \geq 0$, el modelo cuenta una operación por partícula: $W(n)=n$.
+
+```scala
+def trabajo(n: Int): Int = {
+  n
+}
+```
+
+Por sustitución, `trabajo(n)` evalúa directamente a $n=W(n)$. No suma ni
+multiplica enteros, así que tampoco desborda al recibir `Int.MaxValue`.
+Termina en un número fijo de pasos y no tiene efectos.
+
+---
+
+## 10. `profundidad` (punto 4)
+
+### Especificación y programa
+
+Para $n \geq 0$ y $u=\max(\text{umbral},1)$, el camino crítico incluye el
+trabajo secuencial de la hoja y una unidad por partición:
+
+```math
+D(n,u)=\begin{cases}
+n & n\leq u,\\
+1+\max(D(\lfloor n/2\rfloor,u),D(n-\lfloor n/2\rfloor,u)) & n>u.
+\end{cases}
+```
+
+El programa completo está en la sección 10 de `proceso.md`: `resolver`
+devuelve `tamano` en una hoja; en un nodo interno suma uno al máximo de los
+dos llamados. No descarta el sobrante de un tamaño impar.
+
+### Demostración por inducción fuerte sobre $n$
+
+**Caso base: $n\leq u$.** `resolver(n)` devuelve $n=D(n,u)$, incluido $n=0$.
+
+**Caso de inducción: $n>u$.** Sea $a=\lfloor n/2\rfloor$ y $b=n-a$.
+Ambos son positivos y menores que $n$. Por la HI:
+
+```math
+\text{resolver}(n) \rightarrow 1+\max(\text{resolver}(a),\text{resolver}(b))
+=1+\max(D(a,u),D(b,u))=D(n,u)
+```
+
+La llamada inicial `resolver(n)` da entonces la profundidad especificada.
+Como el tamaño baja estrictamente hasta una hoja, el cálculo termina para
+cualquier umbral corregido. No modifica datos ni ejecuta la simulación.
+
+### Ejemplo con ramas de diferente costo
+
+```math
+D(6,5)=1+\max(3,3)=4, \qquad
+D(11,5)=1+\max(5,4)=6
+```
+
+```math
+D(12,5)=1+\max(4,4)=5, \qquad
+D(23,5)=1+\max(6,5)=7
+```
+
+La rama menor puede dejar una hoja secuencial más costosa. Evaluar solamente
+la mitad mayor no implementa esta recurrencia.
+
+---
+
+## 11. `tiempoEstimado` (punto 4)
+
+### Especificación, programa y demostración
+
+Para $n\geq 0$ y $p>0$ procesadores:
+
+```math
+T(n,p,u)=D(n,u)+\frac{W(n)}{p}
+```
+
+```scala
+def tiempoEstimado(n: Int, p: Int, umbral: Int): Double = {
+  profundidad(n, umbral) + trabajo(n).toDouble / p
+}
+```
+
+Por las secciones 9 y 10, los llamados calculan $W$ y $D$. Convertir el
+trabajo a `Double` antes de dividir conserva la parte fraccionaria del
+cociente; sumarla a $D$ da la fórmula. La precisión es la de `Double`.
+Por ejemplo, $D(13,3)=1+\max(4,4)=5$, así que
+$T(13,8,3)=5+13/8=6{,}625$. Las funciones llamadas terminan y no tienen
+efectos; esta tampoco los tiene.
+
+El dominio del modelo es tamaño no negativo y procesadores positivos. No se
+añaden reglas de rechazo o normalización para tamaños negativos ni para
+procesadores no positivos, que no están especificadas por las pruebas dadas.
+
+### Comprobación con las cinco pruebas propias de P4
+
+| Prueba | Entrada | Esperado | Qué comprueba |
+|---|---|---|---|
+| trabajo vacío y grande | $0$, `Int.MaxValue` | los mismos valores | $W(n)=n$, sin cálculo que desborde |
+| rama menor más costosa | $(11,5),(12,5),(23,5)$ | $6,5,7$ | máximo de ambas ramas |
+| división impar | $(9,2)$ | $5$ | conserva el elemento sobrante |
+| vacío y umbral no positivo | $n=0$ con $u=-2,0,1,4$; $n=5$ con $u=-2,0,1$ | $0$ y $4$, respectivamente | caso base y terminación |
+| cociente fraccionario | $(13,8,3)$ y $(0,3,2)$ | $6{,}625$ y $0$ | división flotante y composición |
+
+Las pruebas dadas comprueban además $D(1024,1024)=1024$,
+$D(1024,512)=513$, $D(1024,1)=11$ y la fórmula con uno y cuatro procesadores.
+
+---
+
+## 12. `aceleracion` (punto 5)
+
+### Especificación, programa y demostración
+
+Para tiempos positivos, finitos y expresados en la misma unidad:
+
+```math
+S(t_s,t_p)=t_s/t_p.
+```
+
+```scala
+def aceleracion(tSecuencial: Double, tParalelo: Double): Double = {
+  tSecuencial / tParalelo
+}
+```
+
+La única expresión implementa la definición con la precisión de `Double`.
+Para un cambio de unidad por $c>0$, $(ct_s)/(ct_p)=t_s/t_p$ sobre los reales;
+con coma flotante se compara con tolerancia. Por ejemplo, `0.018 / 0.006`
+puede dar `2.9999999999999996` en lugar de `3.0`. No se añaden excepciones
+para tiempos cero: fuera del dominio experimental positivo rigen las reglas
+de `Double`, incluidos infinito y NaN.
+
+---
+
+## 13. `umbralConveniente` (punto 5)
+
+### Especificación y programa
+
+Con candidatos vacíos devuelve el tamaño del sistema. Con candidatos no
+vacíos devuelve un candidato cuyo tiempo mediano observado sea mínimo:
+
+```scala
+def umbralConveniente(s: Sistema, dt: Double, umbrales: List[Int]): Int = {
+  if (umbrales.isEmpty) s.length
+  else umbrales.map(u => (u, medir(3) { pasoParalelo(s, dt, u) })).minBy(_._2)._1
+}
+```
+
+### Demostración
+
+En el caso vacío, la primera rama devuelve exactamente `s.length`, incluido
+cero para un sistema vacío, y la rama que mide no se evalúa.
+
+En el caso no vacío, `map` conserva un par por candidato y su orden. Cada
+segunda componente se obtiene evaluando `pasoParalelo(s, dt, u)` con los
+mismos datos y `dt` recibidos. La lista de pares es no vacía, así que `minBy`
+está definido para tiempos finitos y el par elegido tiene una segunda
+componente no mayor que la de los demás. Su primera componente pertenece a
+la lista original. En empate se conserva el primero. La terminación depende
+de que cada medición termine; cada paso paralelo termina por el argumento de
+P1. No se modifican las partículas de entrada.
+
+Esto prueba la selección del mínimo medido, no que ese umbral gane siempre.
+Las pruebas no fijan tiempos ni ganador para candidatos distintos.
+
+### Comprobación con las cinco pruebas propias de P5
+
+| Prueba | Entrada | Esperado | Qué comprueba |
+|---|---|---|---|
+| mejora decimal | tiempos 7,5 y 3 | 2,5 con tolerancia | cociente fraccionario |
+| paralelo más lento | tiempos 12 y 48 | 0,25 | conserva ralentizaciones |
+| cambio de unidad | 18/6 y 0,018/0,006 | diferencia menor que $10^{-9}$ | redondeo flotante |
+| candidatos vacíos | sistemas de 0 y 7 partículas | 0 y 7 sin medir | ambos casos de respaldo |
+| candidato único | dos partículas, `dt=2`, `List(1)` | umbral 1, posiciones (-3,8) y (-2,-2) | paso completo, tres repeticiones e inmutabilidad |
+
+La quinta prueba sustituye solamente `medir` para inspeccionar el bloque y
+su argumento de repeticiones; no sustituye `pasoParalelo` ni inventa un ganador
+entre umbrales distintos. La prueba original de pertenencia ejecuta además
+la búsqueda real con `List(16,128,1024)`.
+
+### Verificación ejecutada
+
+```powershell
+.\gradlew.bat :app:test --tests taller.SimulacionParticulasPuntos3y4Test --tests taller.SimulacionParticulasPunto5Test --offline --console=plain
+.\gradlew.bat :app:test :app:scalastyleMainCheck :app:scalastyleTestCheck --offline --console=plain --rerun-tasks --continue
+```
+
+La selección P3/P4/P5 pasó: 15 pruebas propias (5 por punto). La suite completa
+ejecutó 81 pruebas: 77 pasaron y 4 fallaron con `scala.NotImplementedError`.
+Tres fallos corresponden a `centroDeMasaSecuencial` de P2 y uno a la prueba
+original de P3 que llama esa referencia secuencial pendiente. No son fallos
+de las pruebas propias ni de P5. Scalastyle procesó cuatro archivos principales
+y un archivo de pruebas, con cero errores y cero advertencias en ambos grupos.
+P2 se conserva pendiente.
+
+La recuperación directa del 25 de noviembre de 2026 repitió la suite completa
+después del benchmark: 81 pruebas, 77 correctas y los mismos cuatro
+`NotImplementedError`; ambos controles Scalastyle volvieron a dar cero errores
+y advertencias. El benchmark terminó correctamente en 53 segundos. La tabla
+actualizada y la dispersión de sus controles están en `paralelizacion.md`:
+la corrección funcional de P5 no implica estabilidad experimental validada.

@@ -430,7 +430,7 @@ def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = {
       val (izq, der) = parallel(resolver(desde, medio), resolver(medio, hasta))
       izq ++ der
     }
-  resolver(0, s.length)
+  if (s.length <= umb) pasoSecuencial(s, dt) else resolver(0, s.length)
 }
 ```
 
@@ -452,12 +452,14 @@ def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = {
     `pasoSegmento`.
   * Si no, lo parte por la mitad en `medio`, resuelve las dos mitades **al
     mismo tiempo** con `parallel` y pega los resultados con `++`.
-* La llamada inicial es `resolver(0, s.length)`: todo el sistema.
+* Si `s.length <= umb`, se llama a `pasoSecuencial(s, dt)`; en otro caso,
+  la llamada inicial es `resolver(0, s.length)`: todo el sistema.
 
 ### Explicación paso a paso
 
 1. Se calcula `umb`.
-2. `resolver(0, n)` mira el tamaño del tramo, `hasta - desde`.
+2. Si `n <= umb`, se ejecuta `pasoSecuencial(s, dt)`; en otro caso,
+   `resolver(0, n)` mira el tamaño del tramo, `hasta - desde`.
 3. Si es pequeño (`<= umb`), se llega a una **hoja** del árbol: `pasoSegmento`
    mueve esas partículas en el hilo actual.
 4. Si es grande, se calcula `medio = desde + (hasta - desde) / 2` (división
@@ -482,7 +484,8 @@ pasoParalelo(tres, 2.0, 1)
 
 ```scala
 umb = math.max(1, 1) = 1
-resolver(0, s.length)        // última línea de pasoParalelo
+if (s.length <= umb) pasoSecuencial(s, dt) else resolver(0, s.length)
+→ resolver(0, s.length)      // 3 > 1: rama recursiva
 → resolver(0, tres.length)   // s = tres
 → resolver(0, 3)             // tres tiene 3 partículas: desde = 0, hasta = 3
 ```
@@ -542,8 +545,7 @@ Es exactamente el resultado de `pasoSecuencial(tres, 2.0)` (sección 2).
 ```scala
 pasoParalelo(Array(p), 1.0, 0)
 → umb = math.max(0, 1) = 1
-→ resolver(0, 1)           // 1 <= 1, hoja
-→ pasoSegmento(Array(p), 1.0, 0, 1)
+→ pasoSecuencial(Array(p), 1.0)  // 1 <= umb: guarda inicial
 → Array(mover(p, 1.0))
 ```
 
@@ -554,7 +556,8 @@ llamaría a sí mismo como `resolver(0, 1)` sin fin.
 
 ### Árbol de llamados
 
-Cada nodo interno es un `parallel` y cada hoja es un `pasoSegmento`. Para
+Si se entra en `resolver`, cada nodo interno es un `parallel` y cada hoja
+es un `pasoSegmento`. Para
 `tres` con umbral 1:
 
 ```mermaid
@@ -605,7 +608,7 @@ sequenceDiagram
 
 ```scala
 val r1 = pasoParalelo(tres, 2.0, 1)    // parte hasta cada partícula
-val r2 = pasoParalelo(tres, 2.0, 100)  // no parte: una sola hoja
+val r2 = pasoParalelo(tres, 2.0, 100)  // no parte: pasoSecuencial directo
 val r3 = pasoParalelo(tres, 2.0, 0)    // umb = 1, igual que r1
 println(r1.toList == pasoSecuencial(tres, 2.0).toList)  // true
 println(r2.toList == r1.toList && r3.toList == r1.toList)  // true
@@ -777,3 +780,361 @@ println(masaTotal(tres))                       // 6.0
 println(masaTotal(Array()))                    // 0.0
 println(masaTotal(pasoSecuencial(tres, 5.0)))  // 6.0: moverse no cambia la masa
 ```
+
+---
+
+## 7. `energiaParalela` (punto 3)
+
+### Definición del algoritmo
+
+```scala
+def energiaParalela(s: Sistema, umbral: Int): Double = {
+  val umb = math.max(umbral, 1)
+  def resolver(desde: Int, hasta: Int): Double =
+    if (hasta - desde <= umb) energiaSecuencial(s.slice(desde, hasta))
+    else {
+      val medio = desde + (hasta - desde) / 2
+      val (izq, der) = parallel(resolver(desde, medio), resolver(medio, hasta))
+      izq + der
+    }
+  resolver(0, s.length)
+}
+```
+
+* Recibe el sistema `s` y el `umbral`, igual que `pasoParalelo`.
+* Usa el mismo auxiliar local `resolver(desde, hasta)` y el mismo umbral
+  corregido `umb`. Una hoja calcula la energía secuencial del recorte.
+* En un nodo interno, `parallel` calcula las dos mitades y `izq + der` suma
+  sus energías. Aquí se combinan números, no arreglos.
+* El vacío es una hoja: `energiaSecuencial(Array())` da `0.0`.
+
+### Evaluación con el modelo de sustitución
+
+Con `tres` de la sección 2 y umbral 1, las energías son aproximadamente
+$0{,}5$, $1$ y $12$:
+
+```scala
+energiaParalela(tres, 1)
+→ umb = 1; resolver(0, 3)
+→ parallel(resolver(0, 1), resolver(1, 3))
+resolver(0, 1) → energiaSecuencial(tres.slice(0, 1)) → 0.5
+resolver(1, 3) → parallel(resolver(1, 2), resolver(2, 3))
+resolver(1, 2) → energiaSecuencial(tres.slice(1, 2)) → 1.0
+resolver(2, 3) → energiaSecuencial(tres.slice(2, 3)) → 12.0 (aprox.)
+resolver(1, 3) → 1.0 + 12.0 → 13.0 (aprox.)
+resolver(0, 3) → 0.5 + 13.0 → 13.5 (aprox.)
+```
+
+### Árbol de llamados
+
+```mermaid
+graph TD
+    A["resolver(0, 3): suma 13.5"] --> B["resolver(0, 1): hoja 0.5"]
+    A --> C["resolver(1, 3): suma 13.0"]
+    C --> D["resolver(1, 2): hoja 1.0"]
+    C --> E["resolver(2, 3): hoja 12.0"]
+```
+
+Los valores se combinan después de que terminan las dos ramas. Los redondeos
+de `Double` se comparan con `cerca`, como en la energía secuencial.
+
+### Ejemplo de uso
+
+```scala
+println(energiaParalela(tres, 1))    // 13.5 (aprox.), hojas de una partícula
+println(energiaParalela(tres, 10))   // 13.5 (aprox.), una sola hoja
+println(energiaParalela(tres, 0))    // 13.5 (aprox.), umb = 1
+```
+
+---
+
+## 8. `centroDeMasaParalelo` (punto 3)
+
+### Definición del algoritmo
+
+```scala
+def centroDeMasaParalelo(s: Sistema, umbral: Int): Vector2 = {
+  val umb = math.max(umbral, 1)
+  def resolver(desde: Int, hasta: Int): (Vector2, Double) =
+    if (hasta - desde <= umb) {
+      s.slice(desde, hasta).foldLeft((Vector2(0, 0), 0.0)) {
+        case ((suma, masa), p) => (suma + p.pos * p.masa, masa + p.masa)
+      }
+    } else {
+      val medio = desde + (hasta - desde) / 2
+      val (izq, der) = parallel(resolver(desde, medio), resolver(medio, hasta))
+      (izq._1 + der._1, izq._2 + der._2)
+    }
+  val (suma, masa) = resolver(0, s.length)
+  if (masa == 0.0) Vector2(0, 0) else suma * (1.0 / masa)
+}
+```
+
+* Recibe `s` y `umbral`. El auxiliar devuelve un par: la suma de posiciones
+  ponderadas y la masa del tramo. Todavía no devuelve un centro de masa.
+* `foldLeft` empieza en `(Vector2(0, 0), 0.0)` y acumula una partícula a la
+  vez: suma `p.pos * p.masa` al vector y `p.masa` a la masa.
+* Los pares de las mitades se suman componente a componente. Solo después
+  de resolver el sistema completo se multiplica el vector por `1.0 / masa`.
+* Si la masa total es cero, devuelve el origen. No necesita llamar al centro
+  secuencial del punto 2.
+
+### Evaluación con el modelo de sustitución
+
+Ejemplo con posiciones $(-4,2)$, $(2,-2)$ y $(6,4)$, masas $2$, $1$ y $3$,
+y umbral 1. Las velocidades no intervienen:
+
+```scala
+resolver(0, 3) → parallel(resolver(0, 1), resolver(1, 3))
+resolver(0, 1) → (Vector2(-8, 4), 2.0)
+resolver(1, 3) → parallel(resolver(1, 2), resolver(2, 3))
+resolver(1, 2) → (Vector2(2, -2), 1.0)
+resolver(2, 3) → (Vector2(18, 12), 3.0)
+resolver(1, 3) → (Vector2(2, -2) + Vector2(18, 12), 1.0 + 3.0)
+              → (Vector2(20, 10), 4.0)
+resolver(0, 3) → (Vector2(-8, 4) + Vector2(20, 10), 2.0 + 4.0)
+              → (Vector2(12, 14), 6.0)
+centroDeMasaParalelo(s, 1) → Vector2(12, 14) * (1.0 / 6.0)
+                          → Vector2(2.0, 2.333333333333333) (aprox.)
+```
+
+El centro de la mitad izquierda sería $(-4,2)$ y el de la derecha $(5,2{,}5)$.
+Promediarlos daría $(0{,}5,2{,}25)$, que no es $(2,7/3)$: las mitades pesan
+$2$ y $4$, respectivamente.
+
+### Árbol de llamados
+
+```mermaid
+graph TD
+    A["0 a 3: suma (12,14), masa 6"] --> B["0 a 1: suma (-8,4), masa 2"]
+    A --> C["1 a 3: suma (20,10), masa 4"]
+    C --> D["1 a 2: suma (2,-2), masa 1"]
+    C --> E["2 a 3: suma (18,12), masa 3"]
+    A --> F["división final: centro (2,7/3)"]
+```
+
+### Caso sin masa
+
+```scala
+centroDeMasaParalelo(Array(), 0)
+→ umb = 1; resolver(0, 0)
+→ Array().foldLeft((Vector2(0, 0), 0.0))(...)
+→ (Vector2(0, 0), 0.0)
+→ Vector2(0, 0)
+```
+
+Una hoja con partículas de masa cero produce el mismo par neutro, aunque
+sus posiciones estén lejos del origen. No se divide entre cero en las hojas.
+
+---
+
+## 9. `trabajo` (punto 4)
+
+### Definición del algoritmo
+
+```scala
+def trabajo(n: Int): Int = {
+  n
+}
+```
+
+* Recibe el número de partículas, $n \geq 0$.
+* El modelo cuenta una operación por partícula: $W(n) = n$. La función
+  devuelve ese número directamente; no ejecuta la simulación.
+
+### Evaluación con el modelo de sustitución
+
+```scala
+trabajo(13) → 13
+trabajo(0) → 0
+```
+
+La evaluación no es recursiva. Calcular la estimación cuesta un número fijo
+de pasos, aunque el trabajo que representa crezca con $n$.
+
+---
+
+## 10. `profundidad` (punto 4)
+
+### Definición del algoritmo
+
+```scala
+def profundidad(n: Int, umbral: Int): Int = {
+  val umb = math.max(umbral, 1)
+  def resolver(tamano: Int): Int =
+    if (tamano <= umb) tamano
+    else {
+      val medio = tamano / 2
+      1 + math.max(resolver(medio), resolver(tamano - medio))
+    }
+  resolver(n)
+}
+```
+
+* Recibe el tamaño $n \geq 0$ y el umbral. Corrige el umbral igual que P3.
+* Una hoja cuenta su trabajo secuencial, `tamano`, no solamente un nivel.
+* Un nodo interno cuenta una partición más la profundidad mayor de sus dos
+  ramas, porque para combinar debe esperar a las dos.
+* El corte usa división entera: con tamaño impar las ramas miden `medio` y
+  `tamano - medio`. El elemento sobrante se conserva.
+* El cálculo de la estimación se hace en secuencia; `math.max` describe el
+  camino crítico del algoritmo modelado, no una llamada a `parallel`.
+
+### Evaluación con el modelo de sustitución
+
+Con 23 partículas y umbral 5:
+
+```scala
+profundidad(23, 5) → resolver(23)
+resolver(23) → 1 + math.max(resolver(11), resolver(12))
+resolver(11) → 1 + math.max(resolver(5), resolver(6))
+resolver(5)  → 5
+resolver(6)  → 1 + math.max(resolver(3), resolver(3)) → 1 + 3 → 4
+resolver(11) → 1 + math.max(5, 4) → 6
+resolver(12) → 1 + math.max(resolver(6), resolver(6)) → 1 + 4 → 5
+resolver(23) → 1 + math.max(6, 5) → 7
+```
+
+La rama de 11 elementos cuesta más que la de 12: deja una hoja de 5 sin
+partir. Por eso no basta con seguir siempre la mitad más grande.
+
+### Árbol de llamados
+
+Para `profundidad(9, 2)`:
+
+```mermaid
+graph TD
+    A["9: 1 + max(3,4) = 5"] --> B["4: 1 + max(2,2) = 3"]
+    A --> C["5: 1 + max(2,3) = 4"]
+    B --> D["2: hoja, costo 2"]
+    B --> E["2: hoja, costo 2"]
+    C --> F["2: hoja, costo 2"]
+    C --> G["3: 1 + max(1,2) = 3"]
+    G --> H["1: hoja, costo 1"]
+    G --> I["2: hoja, costo 2"]
+```
+
+### Ejemplo de uso
+
+```scala
+println(profundidad(1024, 1024))  // 1024: no parte
+println(profundidad(1024, 512))   // 1 + 512 = 513
+println(profundidad(1024, 1))     // 10 + 1 = 11
+println(profundidad(0, 0))        // 0: hoja vacía
+```
+
+---
+
+## 11. `tiempoEstimado` (punto 4)
+
+### Definición del algoritmo
+
+```scala
+def tiempoEstimado(n: Int, p: Int, umbral: Int): Double = {
+  profundidad(n, umbral) + trabajo(n).toDouble / p
+}
+```
+
+* Recibe $n \geq 0$, el número de procesadores $p > 0$ y el umbral.
+* Suma la profundidad y el trabajo dividido entre los procesadores.
+  `toDouble` se aplica **antes** de dividir para conservar la fracción.
+* El resultado está en unidades del modelo, no en milisegundos.
+
+### Evaluación con el modelo de sustitución
+
+```scala
+tiempoEstimado(9, 4, 2)
+→ profundidad(9, 2) + trabajo(9).toDouble / 4
+→ 5 + 9.0 / 4
+→ 5 + 2.25
+→ 7.25
+```
+
+Con $p = 1$ la fórmula sigue sumando profundidad y trabajo; no se reemplaza
+por el tiempo secuencial. Para el vacío y procesadores positivos da `0.0`.
+
+---
+
+## 12. `aceleracion` (punto 5)
+
+### Definición del algoritmo
+
+```scala
+def aceleracion(tSecuencial: Double, tParalelo: Double): Double = {
+  tSecuencial / tParalelo
+}
+```
+
+Recibe dos tiempos en la misma unidad y devuelve su cociente. Para tiempos
+positivos, un resultado mayor que uno indica mejora; menor que uno indica
+ralentización. No convierte el cociente en porcentaje ni lo limita a uno.
+
+### Evaluación con el modelo de sustitución
+
+```scala
+aceleracion(7.5, 3.0)
+→ 7.5 / 3.0
+→ 2.5
+
+aceleracion(12.0, 48.0)
+→ 12.0 / 48.0
+→ 0.25
+```
+
+### Ejemplo de uso
+
+En la medición real de un millón con umbral 500 000:
+`aceleracion(64.076180, 50.740670)` da aproximadamente `1.262817`.
+En `App` son medianas de cuatro muestras balanceadas de ScalaMeter,
+no constantes fijadas en el programa. El control de un millón queda cerca
+de uno, pero hay dispersión y el de 500 000 sigue sin validar: este cociente
+no demuestra una mejora estable (véase `paralelizacion.md`).
+
+---
+
+## 13. `umbralConveniente` (punto 5)
+
+### Definición del algoritmo
+
+```scala
+def umbralConveniente(s: Sistema, dt: Double, umbrales: List[Int]): Int = {
+  if (umbrales.isEmpty) s.length
+  else umbrales.map(u => (u, medir(3) { pasoParalelo(s, dt, u) })).minBy(_._2)._1
+}
+```
+
+* Si no hay candidatos devuelve `s.length`, sin ejecutar mediciones.
+* Si hay candidatos, `map` asocia cada umbral con la mediana de tres
+  mediciones del paso completo. `minBy(_._2)` elige el menor tiempo y `_1`
+  recupera su umbral. Se conserva el valor recibido, aunque P1 normalice
+  internamente un umbral no positivo.
+* Solo busca entre los candidatos recibidos. Un mínimo observado no asegura
+  el mejor umbral universal ni el mismo ganador en otra ejecución.
+
+### Evaluación con el modelo de sustitución
+
+Para candidatos `List(a, b)`, sean `ta` y `tb` las medianas realmente medidas:
+
+```scala
+umbralConveniente(s, dt, List(a, b))
+→ List((a, ta), (b, tb)).minBy(_._2)._1
+→ a si ta <= tb; b si tb < ta
+
+umbralConveniente(s, dt, Nil)
+→ s.length
+```
+
+`ta` y `tb` son símbolos de la evaluación, no tiempos experimentales inventados.
+En empate, `minBy` conserva el primero.
+
+### Medición en `App` y ejemplo de uso
+
+`umbralConveniente(s, 0.5, List(s.length))` devuelve ese único candidato.
+`App` compara dos tamaños grandes, 500 000 y 1 000 000, y cuatro umbrales
+por tamaño. Genera los datos y comprueba el resultado antes de cronometrar.
+Imprime cada par medido, medianas en milisegundos, aceleración, MAD, rango de
+cocientes, procesadores disponibles y mínimo observado. Usa cuatro rondas
+balanceadas, tres precalentamientos por ruta y candidato, `Warmer.Default`
+con 5..10 calentamientos y `benchRuns = 5`; mide el paso completo y entrega
+su longitud al medidor. No altera el `medir` proporcionado.
+El experimento y sus límites están en `paralelizacion.md`.
