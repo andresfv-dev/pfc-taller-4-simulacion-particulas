@@ -64,7 +64,14 @@ class SimulacionParticulas {
    * La suma de las posiciones ponderadas por la masa, dividida entre la masa
    * total. Sin masa, el origen.
    */
-  def centroDeMasaSecuencial(s: Sistema): Vector2 = ???
+  def centroDeMasaSecuencial(s: Sistema): Vector2 = {
+    val m = masaTotal(s)
+    if (m == 0.0) Vector2(0, 0)
+    else {
+      val suma = s.foldLeft(Vector2(0, 0))((acc, p) => acc + p.pos * p.masa)
+      suma * (1.0 / m)
+    }
+  }
 
   // Punto 3: las mismas magnitudes en paralelo --------------------------------
 

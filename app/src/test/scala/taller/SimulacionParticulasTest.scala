@@ -370,6 +370,37 @@ class SimulacionParticulasTest extends AnyFunSuite {
     val m = masaTotal(grande)
     assert(m >= 1000 * 0.1 && m <= 1000 * 5.1)
   }
+
+  // pruebas propias centroDeMasaSecuencial
+
+  test("centroDeMasaSecuencial: el centro de tres con masas distintas") {
+    // (1*(0,0) + 2*(2,2) + 3*(-1,3)) / 6 = (1, 13) / 6
+    assert(cerca(centroDeMasaSecuencial(tres), Vector2(1.0 / 6, 13.0 / 6)))
+  }
+
+  test("centroDeMasaSecuencial: con una sola partícula el centro es su posición") {
+    val una = Particula(Vector2(3, -2), Vector2(1, 1), 5.0)
+    assert(cerca(centroDeMasaSecuencial(Array(una)), Vector2(3, -2)))
+  }
+
+  test("centroDeMasaSecuencial: si todas las masas son cero el centro es el origen") {
+    val sinMasa: Sistema = Array(
+      Particula(Vector2(5, 5), Vector2(0, 0), 0.0),
+      Particula(Vector2(-2, 7), Vector2(0, 0), 0.0))
+    assert(centroDeMasaSecuencial(sinMasa) == Vector2(0, 0))
+  }
+
+  test("centroDeMasaSecuencial: multiplicar todas las masas por 10 no cambia el centro") {
+    val diezVeces = tres.map(p => Particula(p.pos, p.vel, p.masa * 10))
+    assert(cerca(centroDeMasaSecuencial(diezVeces), centroDeMasaSecuencial(tres)))
+  }
+
+  test("centroDeMasaSecuencial: si todas se mueven igual el centro se mueve igual") {
+    val juntas = tres.map(p => Particula(p.pos, Vector2(1, 1), p.masa))
+    val antes = centroDeMasaSecuencial(juntas)
+    val despues = centroDeMasaSecuencial(pasoSecuencial(juntas, 2.0))
+    assert(cerca(despues, antes + Vector2(2, 2)))
+  }
 }
 
 @RunWith(classOf[JUnitRunner])

@@ -991,7 +991,7 @@ existente. No usan `centroDeMasaSecuencial` como resultado esperado.
 
 Las pruebas dadas también cubren el vacío y comparan energías de un sistema
 grande. La prueba dada que obtiene el centro esperado llamando al centro
-secuencial depende de que se complete P2.
+secuencial usa la implementación de P2 integrada en esta fusión (sección 14).
 
 ---
 
@@ -1184,17 +1184,182 @@ la búsqueda real con `List(16,128,1024)`.
 .\gradlew.bat :app:test :app:scalastyleMainCheck :app:scalastyleTestCheck --offline --console=plain --rerun-tasks --continue
 ```
 
-La selección P3/P4/P5 pasó: 15 pruebas propias (5 por punto). La suite completa
-ejecutó 81 pruebas: 77 pasaron y 4 fallaron con `scala.NotImplementedError`.
-Tres fallos corresponden a `centroDeMasaSecuencial` de P2 y uno a la prueba
-original de P3 que llama esa referencia secuencial pendiente. No son fallos
-de las pruebas propias ni de P5. Scalastyle procesó cuatro archivos principales
-y un archivo de pruebas, con cero errores y cero advertencias en ambos grupos.
-P2 se conserva pendiente.
+La selección P3/P4/P5 pasó: 15 pruebas propias (5 por punto). Antes de integrar
+P2, la suite completa ejecutó 81 pruebas: 77 pasaron y 4 fallaron con
+`scala.NotImplementedError`. Tres fallos correspondían a `centroDeMasaSecuencial`
+de P2 y uno a la prueba original de P3 que llama esa referencia secuencial.
+Scalastyle procesó cuatro archivos principales y un archivo de pruebas, con
+cero errores y cero advertencias en ambos grupos.
 
-La recuperación directa del 25 de noviembre de 2026 repitió la suite completa
-después del benchmark: 81 pruebas, 77 correctas y los mismos cuatro
-`NotImplementedError`; ambos controles Scalastyle volvieron a dar cero errores
-y advertencias. El benchmark terminó correctamente en 53 segundos. La tabla
-actualizada y la dispersión de sus controles están en `paralelizacion.md`:
-la corrección funcional de P5 no implica estabilidad experimental validada.
+La recuperación directa del 25 de noviembre de 2026 repitió esa suite antes
+de integrar P2, después del benchmark: 81 pruebas, 77 correctas y los mismos
+cuatro `NotImplementedError`; ambos controles Scalastyle volvieron a dar cero
+errores y advertencias. El benchmark terminó correctamente en 53 segundos.
+La tabla actualizada y la dispersión de sus controles están en
+`paralelizacion.md`: la corrección funcional de P5 no implica estabilidad
+experimental validada.
+
+Tras integrar P2 el 25 de noviembre de 2026 se ejecutó:
+
+```powershell
+.\gradlew.bat :app:test :app:scalastyleMainCheck :app:scalastyleTestCheck --offline --console=plain --rerun-tasks
+```
+
+Resultado: `BUILD SUCCESSFUL` en 27 segundos, 86 pruebas correctas
+(71 de la suite general, 10 propias de P3/P4 y 5 propias de P5), sin fallos,
+errores ni pruebas omitidas. Ambos controles Scalastyle dieron cero errores
+y cero advertencias. P2 incluye las cinco pruebas propias de la sección 14;
+también pasa la prueba original de P3 que usa el centro secuencial.
+
+---
+
+## 14. `centroDeMasaSecuencial` (punto 2)
+
+Esta sección completa las magnitudes secuenciales de la sección 6.
+
+### Especificación
+
+Sea $s = (a_0, \ldots, a_{n-1})$, donde la partícula $a_i$ tiene posición
+$\vec{p}_i$ y masa $m_i$, y sea $M(s) = \sum m_i$ la masa total (sección 6).
+El centro de masa es el promedio de las posiciones, ponderado por la masa:
+
+```math
+C(s) =
+\begin{cases}
+(0, 0) & \text{si } M(s) = 0 \\[4pt]
+\dfrac{1}{M(s)} \displaystyle\sum_{i=0}^{n-1} m_i\, \vec{p}_i & \text{si } M(s) \neq 0
+\end{cases}
+```
+
+El primer caso cubre el sistema vacío y el sistema con todas las masas en $0$:
+sin masa no hay promedio que calcular y se toma el origen.
+
+### Programa
+
+```scala
+def centroDeMasaSecuencial(s: Sistema): Vector2 = {
+  val m = masaTotal(s)
+  if (m == 0.0) Vector2(0, 0)
+  else {
+    val suma = s.foldLeft(Vector2(0, 0))((acc, p) => acc + p.pos * p.masa)
+    suma * (1.0 / m)
+  }
+}
+```
+
+Hay que demostrar:
+
+```math
+\forall s : \text{centroDeMasaSecuencial}(s) == C(s)
+```
+
+### Comportamiento de `foldLeft`
+
+`foldLeft(z)(op)` recorre la secuencia de izquierda a derecha llevando un
+**acumulador**, que empieza en $z$:
+
+```math
+().\text{foldLeft}(z)(op) = z
+```
+
+```math
+(a_0, a_1, \ldots, a_k).\text{foldLeft}(z)(op) = (a_1, \ldots, a_k).\text{foldLeft}(op(z, a_0))(op)
+```
+
+Aquí $op(acc, p) = acc + p.\text{pos} \ast p.\text{masa}$, que con las
+definiciones de `+` y `*` de `Vector2` es $acc + m\,\vec{p}$ componente a
+componente.
+
+### Lema: el acumulador lleva la suma ponderada
+
+Para todo vector $\vec{z}$ y toda secuencia $(a_j, \ldots, a_{n-1})$:
+
+```math
+(a_j, \ldots, a_{n-1}).\text{foldLeft}(\vec{z})(op) == \vec{z} + \sum_{i=j}^{n-1} m_i\, \vec{p}_i
+```
+
+**Demostración por inducción sobre $r = n - j$**, el número de partículas que
+faltan por recorrer.
+
+*Caso base*, $r = 0$ (no falta ninguna):
+
+```math
+().\text{foldLeft}(\vec{z})(op) \rightarrow \vec{z} = \vec{z} + 0
+```
+
+*Caso de inducción*, $r > 0$. HI: el lema vale para $r - 1$ partículas y
+cualquier acumulador.
+
+```math
+(a_j, \ldots, a_{n-1}).\text{foldLeft}(\vec{z})(op)
+\rightarrow (a_{j+1}, \ldots, a_{n-1}).\text{foldLeft}(\vec{z} + m_j\, \vec{p}_j)(op)
+```
+
+```math
+\overset{HI}{=} (\vec{z} + m_j\, \vec{p}_j) + \sum_{i=j+1}^{n-1} m_i\, \vec{p}_i
+= \vec{z} + \sum_{i=j}^{n-1} m_i\, \vec{p}_i
+```
+
+Con $j = 0$ y $\vec{z} = (0, 0)$, el valor de `suma` es:
+
+```math
+\text{suma} == \sum_{i=0}^{n-1} m_i\, \vec{p}_i
+```
+
+### Demostración
+
+Por la sección 6, $m = \text{masaTotal}(s) == M(s)$. Se distinguen los dos
+casos del `if`:
+
+**Caso $M(s) = 0$.** La condición es verdadera:
+
+```math
+\text{centroDeMasaSecuencial}(s) \rightarrow (0, 0) = C(s)
+```
+
+**Caso $M(s) \neq 0$.** La condición es falsa. Por el lema:
+
+```math
+\text{centroDeMasaSecuencial}(s) \rightarrow \text{suma} \ast \tfrac{1}{m}
+= \frac{1}{M(s)} \sum_{i=0}^{n-1} m_i\, \vec{p}_i = C(s)
+```
+
+En los dos casos coincide con la especificación, así que
+$\forall s : \text{centroDeMasaSecuencial}(s) == C(s)$.
+
+### Por qué el `if` es necesario
+
+Sin él, con el sistema vacío se calcularía $(0, 0) \ast \tfrac{1}{0}$. Con
+`Double`, $1/0$ da `Infinity` y $0 \cdot \infty$ da `NaN`: el centro sería
+$(\text{NaN}, \text{NaN})$ en vez del origen.
+
+### Terminación
+
+`masaTotal` termina (sección 6). `foldLeft` recorre las $n$ partículas una vez
+y en cada paso hace una multiplicación y una suma de vectores. Ningún paso es
+recursivo, así que la función termina.
+
+### Ausencia de efectos
+
+`foldLeft` no modifica $s$: el acumulador es un `Vector2` nuevo en cada paso,
+y `Vector2` es inmutable.
+
+### Comprobación con las pruebas
+
+Pruebas dadas:
+
+| Prueba | Entrada | Esperado |
+|---|---|---|
+| punto medio | `s`: masa 2 en $(0,0)$ y masa 2 en $(4,0)$ | $(8, 0)/4 = (2, 0)$ |
+| sin masa | `vacio` | $(0, 0)$ |
+| la masa mayor arrastra | masa 3 en $(0,0)$ y masa 1 en $(4,0)$ | $(4, 0)/4 = (1, 0)$ |
+
+Pruebas propias:
+
+| Prueba | Entrada | Esperado | Qué comprueba |
+|---|---|---|---|
+| tres con masas distintas | `tres` | $(1, 13)/6$ | la fórmula con tres términos |
+| una sola partícula | masa 5 en $(3,-2)$ | $(3, -2)$ | $\tfrac{m\,\vec p}{m} = \vec p$ |
+| todas las masas en cero | dos partículas de masa 0 | $(0, 0)$ | el caso $M(s) = 0$ sin ser vacío, sin `NaN` |
+| masas por 10 | `tres` con masas $10, 20, 30$ | igual que con `tres` | el $10$ se cancela arriba y abajo |
+| todas se mueven igual | velocidad $(1,1)$, $dt = 2$ | el centro se mueve $(2, 2)$ | $\tfrac{1}{M}\sum m_i(\vec p_i + \vec d) = C(s) + \vec d$ |
