@@ -777,3 +777,133 @@ println(masaTotal(tres))                       // 6.0
 println(masaTotal(Array()))                    // 0.0
 println(masaTotal(pasoSecuencial(tres, 5.0)))  // 6.0: moverse no cambia la masa
 ```
+
+---
+
+## 7. `centroDeMasaSecuencial`
+
+### Definición del algoritmo
+
+```scala
+def centroDeMasaSecuencial(s: Sistema): Vector2 = {
+  val m = masaTotal(s)
+  if (m == 0.0) Vector2(0, 0)
+  else {
+    val suma = s.foldLeft(Vector2(0, 0))((acc, p) => acc + p.pos * p.masa)
+    suma * (1.0 / m)
+  }
+}
+```
+
+* La función `centroDeMasaSecuencial` calcula el punto de equilibrio del
+  sistema: el promedio de las posiciones, donde cada partícula pesa según su
+  masa.
+* Recibe un parámetro, `s`: el sistema.
+* Usa tres valores:
+
+  * `m`: la masa total, calculada con `masaTotal` (sección 6).
+  * `suma`: la suma de cada posición multiplicada por su masa.
+  * el resultado, `suma * (1.0 / m)`: la suma dividida entre la masa total.
+* Si la masa total es `0` (sistema vacío o todas las masas en cero) devuelve
+  el origen `Vector2(0, 0)`, porque no se puede dividir entre cero.
+* No modifica `s`.
+
+### Explicación paso a paso
+
+1. Se calcula `m = masaTotal(s)`.
+2. Si `m == 0.0`, se devuelve `Vector2(0, 0)` y se termina.
+3. Si no, `foldLeft` recorre las partículas de izquierda a derecha con un
+   acumulador `acc` que empieza en `Vector2(0, 0)`. A cada partícula le suma
+   `p.pos * p.masa` (la posición escalada por la masa).
+4. Al final, `suma` tiene la suma de todas las posiciones ponderadas.
+5. `suma * (1.0 / m)` divide cada componente entre la masa total. `Vector2`
+   no tiene división, por eso se multiplica por el inverso.
+
+Una partícula con más masa "jala" el centro hacia ella, porque su posición
+cuenta más veces en la suma.
+
+---
+
+### Evaluación con el modelo de sustitución
+
+Ejemplo, con el sistema `tres` de la sección 2:
+
+```scala
+centroDeMasaSecuencial(tres)
+```
+
+#### Paso 1: Se calcula la masa total
+
+```scala
+m = masaTotal(tres) = 1.0 + 2.0 + 3.0 = 6.0
+```
+
+#### Paso 2: Se evalúa el `if`
+
+```scala
+6.0 == 0.0  →  false   // se va por el else
+```
+
+#### Paso 3: `foldLeft` recorre las partículas
+
+| Partícula | `pos` | `masa` | `pos * masa` | `acc` después |
+|---|---|---|---|---|
+| (inicio) | | | | `(0, 0)` |
+| 0 | `(0, 0)` | 1 | `(0, 0)` | `(0, 0) + (0, 0) = (0, 0)` |
+| 1 | `(2, 2)` | 2 | `(4, 4)` | `(0, 0) + (4, 4) = (4, 4)` |
+| 2 | `(-1, 3)` | 3 | `(-3, 9)` | `(4, 4) + (-3, 9) = (1, 13)` |
+
+```scala
+suma = Vector2(1, 13)
+```
+
+#### Paso 4: Se divide entre la masa total
+
+```scala
+Vector2(1, 13) * (1.0 / 6.0)
+→ Vector2(1 / 6.0, 13 / 6.0)
+→ Vector2(0.1666..., 2.1666...)
+```
+
+El centro queda más cerca de la partícula 2, en `(-1, 3)`, que es la más
+pesada, que de la partícula 0, en `(0, 0)`, que es la más liviana.
+
+#### Caso sin masa
+
+```scala
+centroDeMasaSecuencial(Array())
+→ m = masaTotal(Array()) = 0.0
+→ 0.0 == 0.0  →  true
+→ Vector2(0, 0)
+```
+
+---
+
+### Diagrama de llamados
+
+```mermaid
+sequenceDiagram
+    participant C as centroDeMasaSecuencial(tres)
+    participant MT as masaTotal(tres)
+    participant F as tres.foldLeft
+    participant D as suma * (1.0 / m)
+
+    C->>MT: masa total
+    MT-->>C: 6.0
+    C->>F: acc = (0, 0), suma pos * masa
+    F-->>C: Vector2(1, 13)
+    C->>D: divide entre 6.0
+    D-->>C: Vector2(0.1666..., 2.1666...)
+```
+
+---
+
+### Ejemplo de uso
+
+```scala
+println(centroDeMasaSecuencial(tres))     // Vector2(0.1666...,2.1666...)
+println(centroDeMasaSecuencial(Array()))  // Vector2(0.0,0.0)
+
+val una = Particula(Vector2(3, -2), Vector2(1, 1), 5.0)
+println(centroDeMasaSecuencial(Array(una)))  // Vector2(3.0,-2.0): una sola partícula es su propio centro
+```
